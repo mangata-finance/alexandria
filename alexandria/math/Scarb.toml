@@ -4,3 +4,5 @@ version = "0.1.0"
 description = "A set of math Cairo 1.0 libraries and algorithms"
 homepage = "https://github.com/keep-starknet-strange/alexandria/tree/main/data_structures"
 
+[dependencies]
+alexandria_data_structures = { path = "../data_structures/" }

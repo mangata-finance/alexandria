@@ -17,7 +17,7 @@ all: build run test
 build: FORCE
 	$(MAKE) clean format
 	@echo "Building..."
-	cairo-compile . > $(BUILD_DIR)/$(PROJECT_NAME).sierra
+	~/.cairo/target/release/cairo-compile . > $(BUILD_DIR)/$(PROJECT_NAME).sierra
 
 # Run the project
 run:
@@ -77,12 +77,12 @@ test-stack:
 # Format the project
 format:
 	@echo "Formatting everything..."
-	cairo-format --recursive --print-parsing-errors $(ROOT_PROJECT)
+	~/.cairo/target/release/cairo-format --recursive --print-parsing-errors $(ROOT_PROJECT)
 
 # Check the formatting of the project
 check-format:
 	@echo "Checking formatting..."
-	cairo-format --recursive --check $(ROOT_PROJECT)
+	~/.cairo/target/release/cairo-format --recursive --check $(ROOT_PROJECT)
 
 # Clean the project
 clean:

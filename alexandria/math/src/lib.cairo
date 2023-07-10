@@ -17,6 +17,7 @@ mod ed25519;
 mod signed_integers;
 mod zellers_congruence;
 mod mod_arithmetics;
+mod blake2b;
 
 #[cfg(test)]
 mod tests;
