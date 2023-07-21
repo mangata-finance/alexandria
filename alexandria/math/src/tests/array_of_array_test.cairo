@@ -1,21 +1,25 @@
 use array::{ArrayTrait};
 use alexandria_math::blake2b::{blake2b,convert_u8_array_to_felt252_array};
-fn get_lorem_ipsum() -> Array<u8> {
+use alexandria_math::array_of_array::{array_of_array,};
+fn get_lorem_ipsum() -> Array<Span<u8>> {
+
+    let mut inputx: Array<Span<u8>> = Default::default();
     let mut input: Array<u8> = Default::default();
     input.append(0x61);
     input.append(0x62);
     input.append(0x63);
-    input
+    inputx.append(input.span());
+    inputx
 }
 
 #[test]
 #[available_gas(20000000000)]
-fn test_fail() {
+fn array_of_array_fail() {
     let msg = get_lorem_ipsum();
-    let res = blake2b(msg);
+    let res = array_of_array(msg.span(), 0, 0);
     // assert(msg.len() == 6400, 'Incorrect hash length');
     // assert(true==false, 'fail');
-    panic(convert_u8_array_to_felt252_array(res.span()));
+    panic_with_felt252(Into::<u8, felt252>::into(res));
 
 }
 

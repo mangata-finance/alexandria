@@ -2,6 +2,7 @@ mod math;
 use math::pow;
 use math::count_digits_of_base;
 
+// mod array_of_array;
 mod aliquot_sum;
 mod armstrong_number;
 mod collatz_sequence;
@@ -18,6 +19,7 @@ mod signed_integers;
 mod zellers_congruence;
 mod mod_arithmetics;
 mod blake2b;
+mod substrate_storage_proof_verifier;
 
 #[cfg(test)]
 mod tests;
