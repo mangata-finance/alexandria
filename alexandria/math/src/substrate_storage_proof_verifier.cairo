@@ -1,3 +1,4 @@
+use core::debug::PrintTrait;
 use alexandria_math::math::{shr, shl};
 use alexandria_math::sha512::{math_shr_u64, math_shl_u64};
 use integer::{u64_wrapping_add, bitwise, downcast, upcast, BoundedInt };
@@ -6,8 +7,9 @@ use option::OptionTrait;
 use result::ResultTrait;
 use array::{ArrayTrait, SpanTrait};
 use core::clone::Clone;
-use alexandria_math::blake2b::blake2b;
+use alexandria_math::blake2b::{blake2b, convert_u8_array_to_felt252_array};
 use core::traits::Default;
+// use debug::PrintTrait;
 
 
 const FIRST_PREFIX: u8 = 0x00;
@@ -155,7 +157,16 @@ fn verify_substrate_storage_proof(buffer: Span<u8>, buffer_node_index: Span<usiz
 			return Result::Err('Bad Hashes Array');
 		};
 
+
+	// assert(false, 'assert false 1');
 	lookup_value(buffer, buffer_node_index, key, hashes.span(), root)
+
+	// // let hashes_span = hashes.span();
+
+	// // let res =  lookup_value(buffer, buffer_node_index, key, hashes_span, root).unwrap();
+	// // Result::Ok(res.span)
+	// key
+	// Result::Err('Dummy')
 }
 
 // TODO
@@ -173,16 +184,36 @@ fn get_array_from_span(buffer: Span<u8>, start: usize, end: usize) -> Array<u8>{
 	array_op
 }
 
+fn convert_u8_subarray_to_felt252_array(a: Span<u8>, start: usize, length: usize) -> Array<felt252>{
+    let mut x = ArrayTrait::<felt252>::new();
+    let mut i: usize =0;
+    loop{
+        if i == length{break;}
+        x.append((*a.at(i+start)).into());
+        i=i+1;
+    };
+    x
+}
+
 fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hashes: Span<u8>, root: Span<u8>) -> Result<Slice<u8>,felt252>{
 	let mut key_nibble_offset: usize = 0;
 	let mut hash = Slice{span: root, range: Range{start: 0, end: root.len()}};
 
-	// let mut depth:usize =0;
+	// if true{
+	// 	let x:usize=4;
+	// panic(convert_u8_subarray_to_felt252_array(hashes, x*HASH_LENGTH, HASH_LENGTH ));
+	// }
+	let mut depth:usize =0;
+	let mut inner_depth:usize =0;
 	let res2 = loop{
+
+	// assert(false, 'assert false 4');
 		let mut node_data = get_node(hash, hashes, buffer, buffer_index).unwrap();
+		// assert(false, 'assert false 5');
 		let (is_continue, res0) = loop{
 			let decoded_node = parse_encoded_node(node_data).unwrap();
-			let mut next_node = Option::None(());
+			// let decoded_node = NodePlan::Empty(());
+			let mut next_node: Option<NodeHandlePlan> = Option::None(());
 			match decoded_node{
 				NodePlan::Empty(()) => {
 					break (false, Result::Err('Empty Node'));
@@ -198,11 +229,12 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 						};
 				},
 				NodePlan::NibbledBranch((nibble_slice_plan,maybe_value_plan , children)) => {
-						if nibble_partial_starts_with(buffer, nibble_slice_plan, key, key_nibble_offset) {
+						if !nibble_partial_starts_with(buffer, nibble_slice_plan, key, key_nibble_offset) {
 							break (false, Result::Err('No value at NibbledBranch'));
 						};
 
 						if nibble_partial_len_eq(buffer, nibble_slice_plan, key, key_nibble_offset) {
+			// assert(false, 'assert false 7');
 							if maybe_value_plan.is_some(){
 								let val = load_value(
 																buffer,
@@ -214,16 +246,25 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 												} else{break (false, Result::Err('No value at NibbledBranch'));}
 							
 						} else {
+			// assert(false, 'assert false 8');
 
 							if children.at(nibble_at(key, key_nibble_offset+ nibble_len(nibble_slice_plan), false).into()).is_some(){
-								key_nibble_offset = key_nibble_offset + nibble_len(nibble_slice_plan) + 1;
 									next_node = *children.at(nibble_at(key, key_nibble_offset+ nibble_len(nibble_slice_plan), false).into());
+								key_nibble_offset = key_nibble_offset + nibble_len(nibble_slice_plan) + 1;
 							} else {
 								break (false, Result::Err('No NibbledBranch child'));
 							}
 						}
 					},
 			};
+
+			// assert(false, 'assert false 2');
+			// panic_with_felt252(depth);
+			depth.print();
+			inner_depth.print();
+			assert(next_node.is_some(), 'next_node is none');
+			
+			inner_depth = inner_depth + 1;
 
 			match next_node.unwrap() {
 					NodeHandlePlan::Hash(range) => {
@@ -235,7 +276,11 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 					},
 				};
 		};
+		depth = depth +1;
 		if !is_continue{
+			res0.is_ok().print();
+			if res0.is_err(){
+			res0.unwrap_err().print();}
 			break res0;
 		};
 	};
@@ -383,15 +428,19 @@ fn load_value(
 		ValuePlan::Inline(value_plan) => Slice{span: buffer, range: value_plan},
 		// TODO
 		// Use slice for hash
-		ValuePlan::Node(hash_range) => {get_node(Slice{span: buffer, range: hash_range}, hashes, buffer, buffer_index).unwrap()},
+		
+		ValuePlan::Node(hash_range) => {
+	assert(false, 'assert false 3');get_node(Slice{span: buffer, range: hash_range}, hashes, buffer, buffer_index).unwrap()},
 	}
 }
 
 fn get_node(hash: Slice<u8>, hashes: Span<u8>, buffer: Span<u8>, buffer_index: Span<usize>)-> Option<Slice<u8>>{
+
 	let mut res: Option<Slice<u8>> = Option::None(());
 	let mut itr = 0;
 	let number_of_hashes = hashes.len()/HASH_LENGTH;
-	if hashes.len() != buffer_index.len(){
+
+	if number_of_hashes != buffer_index.len(){
 		return Option::None(());
 	}
 	let mut eq = true;
@@ -429,6 +478,17 @@ fn get_node(hash: Slice<u8>, hashes: Span<u8>, buffer: Span<u8>, buffer_index: S
 
 		itr= itr+1;
 	};
+	// if true{
+	// 	// let x:usize=4;
+	// 	// eq.print();
+	// 	if eq {
+	// panic_with_felt252(1);
+	// 	} else {
+
+	// panic_with_felt252(0);
+	// 	}
+	// // panic(convert_u8_array_to_felt252_array(res.unwrap().span ));
+	// }
 	res
 }
 
@@ -438,7 +498,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
     let mut offset: usize = buffer.range.start;
 	// TODO
 	// At the end of parsing the node maybe we could check if it is at the end of the slice
-    let header = decode_header(buffer, ref offset)?;
+    let header = decode_header(buffer, ref offset).unwrap();
 
     let contains_hash = match header {
 	NodeHeader::Null(_) => {false},
@@ -461,6 +521,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
     match header {
 			NodeHeader::Null(()) => Result::Ok(NodePlan::Empty(())),
             NodeHeader::Branch((_, nibble_count)) => {
+				nibble_count.print();
 				let padding = ((nibble_count % NIBBLE_PER_BYTE) != 0);
 				// check that the padding is valid (if any)
 				if padding && (u8_bitand(*buffer.span.at(offset), NIBBLE_BITMASK_LEFT) != 0) {
@@ -470,6 +531,9 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 				let partial = Range {start: offset, end: offset + partial_bytes_length};
                 offset = offset + partial_bytes_length;
 				let partial_padding = (nibble_count%NIBBLE_PER_BYTE) !=0;
+				partial.start.print();
+				partial.end.print();
+				partial_padding.print();
 				let bitmap_range = Range {start: offset, end: offset + BITMAP_LENGTH};
                 offset = offset + BITMAP_LENGTH;
 				let bitmap = bitmap_decode(buffer, bitmap_range);
@@ -479,7 +543,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                         offset = offset + HASH_LENGTH;
                         vp
 					} else {
-						let count = compact_u32_decode(buffer, ref offset)?;
+						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let vp = ValuePlan::Inline(Range {start: offset, end: offset + count});
                         offset = offset + count;
                         vp
@@ -495,7 +559,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                         break;
                     }
 					if bitmap_value_at(bitmap, itr) {
-						let count = compact_u32_decode(buffer, ref offset)?;
+						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let range = Range {start: offset, end: offset + count};
                         offset = offset + count;
 						children.append(Option::Some(if count == HASH_LENGTH {
@@ -529,7 +593,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     offset = offset + HASH_LENGTH;
                     vp
                 } else {
-                    let count = compact_u32_decode(buffer, ref offset)?;
+                    let count = compact_u32_decode(buffer, ref offset).unwrap();
                     let vp = ValuePlan::Inline(Range {start: offset, end: offset + count});
                     offset = offset + count;
                     vp
@@ -559,7 +623,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                         offset = offset + HASH_LENGTH;
                         vp
 					} else {
-						let count = compact_u32_decode(buffer, ref offset)?;
+						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let vp = ValuePlan::Inline(Range {start: offset, end: offset + count});
                         offset = offset + count;
                         vp
@@ -575,7 +639,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                         break;
                     }
 					if bitmap_value_at(bitmap, itr) {
-						let count = compact_u32_decode(buffer, ref offset)?;
+						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let range = Range {start: offset, end: offset + count};
                         offset = offset + count;
 						children.append(Option::Some(if count == HASH_LENGTH {
@@ -666,7 +730,6 @@ fn bitmap_value_at(bitmap: u16, itr: usize) -> bool {
 fn compact_u32_decode(buffer: Slice<u8>, ref offset: usize) -> Result<u32,felt252> {
 	let prefix: u8 = *buffer.span.at(offset);
 	offset = offset + 1;
-	// let prefix = input.read_byte()?;
 
 	let selector: u8 = prefix % 4;
 
@@ -746,16 +809,16 @@ fn decode_header(b: Slice<u8>, ref offset: usize) -> Result<NodeHeader, felt252>
     let masked_i = u8_bitand(i, 0xC0);
 
     if masked_i == LEAF_PREFIX_MASK {
-        Result::Ok(NodeHeader::Leaf(decode_size(i, b, ref offset, 2)?))
+        Result::Ok(NodeHeader::Leaf(decode_size(i, b, ref offset, 2).unwrap()))
     } else if masked_i == BRANCH_WITH_MASK {
-        Result::Ok(NodeHeader::Branch((true, decode_size(i, b, ref offset, 2)?)))
+        Result::Ok(NodeHeader::Branch((true, decode_size(i, b, ref offset, 2).unwrap())))
     } else if masked_i == BRANCH_WITHOUT_MASK {
-        Result::Ok(NodeHeader::Branch((false, decode_size(i, b, ref offset, 2)?)))
+        Result::Ok(NodeHeader::Branch((false, decode_size(i, b, ref offset, 2).unwrap())))
     } else if masked_i == EMPTY_TRIE {
         if u8_bitand(i, 0xE0) == ALT_HASHING_LEAF_PREFIX_MASK {
-            Result::Ok(NodeHeader::HashedValueLeaf((decode_size(i, b, ref offset, 3)?)))
+            Result::Ok(NodeHeader::HashedValueLeaf((decode_size(i, b, ref offset, 3).unwrap())))
         } else if u8_bitand(i, 0xF0) == ALT_HASHING_BRANCH_WITH_MASK {
-            Result::Ok(NodeHeader::HashedValueBranch((decode_size(i, b, ref offset, 4)?)))
+            Result::Ok(NodeHeader::HashedValueBranch((decode_size(i, b, ref offset, 4).unwrap())))
         } else {
             // do not allow any special encoding
             Result::Err('Unallowed encoding')

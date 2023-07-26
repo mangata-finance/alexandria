@@ -125,6 +125,9 @@ fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
 // each u64 of m has to be little endian here
 fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<u64> {
 
+    // if itr == 1{
+    // panic(convert_u64_array_to_felt252_array(h));
+    // }
     let iv = get_iv();
     let mut v = ArrayTrait::<u64>::new();
     let mut i: u8 = 0;
@@ -188,11 +191,6 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
     //     if true{
     // panic(convert_u64_array_to_felt252_array(v.span()));
     // }
-
-    // TODO 
-    // UNDO
-    // DEBUG
-        assert(itr==0, 'itr==0 assert');
 
         // if i==1{
         //     // [14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3]
@@ -272,7 +270,7 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
         h_new.append(u64_xor(u64_xor(*h.at(i.into()), *v7.at(i.into())), *v7.at(8+i.into())));
         i=i+1;
     };
-    // if true{
+    // if itr == 0{
     // panic(convert_u64_array_to_felt252_array(h_new.span()));
     // }
     h_new
@@ -429,7 +427,7 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
     let b_u64_le_len = b_u64_le.len();
     let num_of_blocks = b_u64_le_len/16;
 
-    let h_old = h;
+    let mut h_old = h.span();
     let mut i: u128 = 0;
     let mut h_new = ArrayTrait::<u64>::new();
     loop{
@@ -443,15 +441,19 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
                 t1 = u64_wrapping_add(t1, 1);
             }
 
-            h_new = F(h_old.span(), b_u64_le.span(), t0, t1, false, i);
+            h_new = F(h_old, b_u64_le.span(), t0, t1, false, i);
         } else {
             t0 = u64_wrapping_add(t0, last_block_offset.into());
             if t0 < last_block_offset.into(){
                 t1 = u64_wrapping_add(t1, 1);
             }
-            h_new = F(h_old.span(), b_u64_le.span(), t0, t1, true, i);
-        }
-        let h_old = h_new;
+            h_new = F(h_old, b_u64_le.span(), t0, t1, true, i);
+        };
+
+    //     if true{
+    // panic(convert_u64_array_to_felt252_array(b_u64_le.span()));
+    // }
+        h_old = h_new.span();
         i = i + 1;
     };
 

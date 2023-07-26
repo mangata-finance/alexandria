@@ -16,3 +16,4 @@ mod sha512_test;
 mod mod_arithmetics_test;
 mod blake2b_test;
 // mod array_of_array_test;
+mod substrate_storage_proof_verifier_test;
