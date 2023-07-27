@@ -260,8 +260,8 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 
 			// assert(false, 'assert false 2');
 			// panic_with_felt252(depth);
-			depth.print();
-			inner_depth.print();
+			// depth.print();
+			// inner_depth.print();
 			assert(next_node.is_some(), 'next_node is none');
 			
 			inner_depth = inner_depth + 1;
@@ -278,9 +278,9 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 		};
 		depth = depth +1;
 		if !is_continue{
-			res0.is_ok().print();
-			if res0.is_err(){
-			res0.unwrap_err().print();}
+			// res0.is_ok().print();
+			// if res0.is_err(){
+			// res0.unwrap_err().print();}
 			break res0;
 		};
 	};
@@ -317,9 +317,10 @@ fn nibble_at_slice(nibble_byte_slice: Slice<u8>, nibble_index: usize, padding: b
 
 fn nibble_partial_eq(buffer: Span<u8>, nibble_slice_plan: NibbleSlicePlan, key: Span<u8>, key_nibble_offset: usize) -> bool {
 
-	if (nibble_slice_plan.range.end == nibble_slice_plan.range.start){
-		return true;
-	}
+	// This seems to an error why was this here?
+	// if (nibble_slice_plan.range.end == nibble_slice_plan.range.start){
+	// 	return true;
+	// }
 
 	if !nibble_partial_len_eq(buffer, nibble_slice_plan, key, key_nibble_offset){
 		return false;
@@ -355,7 +356,7 @@ fn nibble_partial_eq(buffer: Span<u8>, nibble_slice_plan: NibbleSlicePlan, key: 
 fn nibble_partial_starts_with(buffer: Span<u8>, nibble_slice_plan: NibbleSlicePlan, key: Span<u8>, key_nibble_offset: usize) -> bool {
 	// remaining key nibble length should be greater than the nibble slice length
 	if (nibble_slice_plan.range.end == nibble_slice_plan.range.start){
-		return key.len() == key_nibble_offset;
+		return true;
 	}
 
 	// if key length is 0 and it reaches here then lens are diff
@@ -521,7 +522,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
     match header {
 			NodeHeader::Null(()) => Result::Ok(NodePlan::Empty(())),
             NodeHeader::Branch((_, nibble_count)) => {
-				nibble_count.print();
+				// nibble_count.print();
 				let padding = ((nibble_count % NIBBLE_PER_BYTE) != 0);
 				// check that the padding is valid (if any)
 				if padding && (u8_bitand(*buffer.span.at(offset), NIBBLE_BITMASK_LEFT) != 0) {
@@ -531,12 +532,13 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 				let partial = Range {start: offset, end: offset + partial_bytes_length};
                 offset = offset + partial_bytes_length;
 				let partial_padding = (nibble_count%NIBBLE_PER_BYTE) !=0;
-				partial.start.print();
-				partial.end.print();
-				partial_padding.print();
+				// partial.start.print();
+				// partial.end.print();
+				// partial_padding.print();
 				let bitmap_range = Range {start: offset, end: offset + BITMAP_LENGTH};
                 offset = offset + BITMAP_LENGTH;
 				let bitmap = bitmap_decode(buffer, bitmap_range);
+				// bitmap.print();
 				let value = if branch_has_value {
 					Option::Some(if contains_hash {
 						let vp = ValuePlan::Node(Range {start: offset, end: offset + HASH_LENGTH});
@@ -572,6 +574,18 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     }
                     itr = itr + 1;
 				};
+
+				let children_span = children.span();
+				// DEBUGGING
+				// let mut itr: usize = 0;
+				// loop {
+                //     if itr == NIBBLE_LENGTH{
+                //         break;
+                //     }
+				// 	children_span.at(itr).is_some().print();
+                //     itr = itr + 1;
+				// };
+				
 				Result::Ok(NodePlan::NibbledBranch((
 					NibbleSlicePlan{range: partial, padding: partial_padding},
 					value,
