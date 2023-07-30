@@ -184,6 +184,44 @@ fn get_array_from_span(buffer: Span<u8>, start: usize, end: usize) -> Array<u8>{
 	array_op
 }
 
+fn u8_array_eq(x: Span<u8>, y: Span<u8>) -> bool {
+	if x.len() != y.len(){
+	// x.len().print();
+	// y.len().print();
+		return false;
+	}
+
+	// x.len().print();
+	// y.len().print();
+
+	let mut itr = 0;
+	let mut eq = true;
+	loop{
+		if itr == x.len(){
+			break;
+		};
+		
+		if *x.at(itr)!=*y.at(itr){
+			eq = false;
+			break;
+		};
+		
+		itr = itr +1;
+	};
+	eq
+}
+
+fn convert_u8_subarray_to_u8_array(a: Span<u8>, start: usize, length: usize) -> Array<u8>{
+    let mut x = ArrayTrait::<u8>::new();
+    let mut i: usize =0;
+    loop{
+        if i == length{break;}
+        x.append(*a.at(i+start));
+        i=i+1;
+    };
+    x
+}
+
 fn convert_u8_subarray_to_felt252_array(a: Span<u8>, start: usize, length: usize) -> Array<felt252>{
     let mut x = ArrayTrait::<felt252>::new();
     let mut i: usize =0;
