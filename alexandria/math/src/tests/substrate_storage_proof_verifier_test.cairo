@@ -1,13 +1,13 @@
 use array::{ArrayTrait, SpanTrait};
 use alexandria_math::blake2b::{convert_u8_array_to_felt252_array};
-use alexandria_math::substrate_storage_proof_verifier::{verify_substrate_storage_proof,convert_u8_subarray_to_felt252_array, u8_array_eq, convert_u8_subarray_to_u8_array};
+use alexandria_math::substrate_storage_proof_verifier::{verify_substrate_storage_proof_given_hashes,verify_substrate_storage_proof,convert_u8_subarray_to_felt252_array, u8_array_eq, convert_u8_subarray_to_u8_array};
 use debug::PrintTrait;
 use result::ResultTrait;
 
 
 #[test]
 #[available_gas(20000000000)]
-fn test_fail() {
+fn test_storage_proof_verification() {
     let (buffer, buffer_index) = get_storage_proof_data();
     let ers = get_expected_raw_storage();
     // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
@@ -22,11 +22,43 @@ fn test_fail() {
 
 #[test]
 #[available_gas(20000000000)]
-fn test_fail_2() {
+fn test_storage_proof_verification_given_hashes() {
+    let (buffer, buffer_index) = get_storage_proof_data();
+    let ers = get_expected_raw_storage();
+    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
+    let res = verify_substrate_storage_proof_given_hashes(buffer.span(), buffer_index.span(), get_key().span(), get_root().span(), get_hashes().span()).unwrap();
+    // assert(msg.len() == 6400, 'Incorrect hash length');
+    // assert(true==false, 'fail');
+    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
+    let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
+    assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
+
+}
+
+#[test]
+#[available_gas(20000000000)]
+fn test_storage_proof_verification_2() {
     let (buffer, buffer_index) = get_storage_proof_data_2();
     let ers = get_expected_raw_storage_2();
     // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
     let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key_2().span(), get_root_2().span()).unwrap();
+    // assert(msg.len() == 6400, 'Incorrect hash length');
+    // assert(true==false, 'fail');
+    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
+    // res.range.start.print();
+    // res.range.end.print();
+    let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
+    assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
+
+}
+
+#[test]
+#[available_gas(20000000000)]
+fn test_storage_proof_verification_given_hashes_2() {
+    let (buffer, buffer_index) = get_storage_proof_data_2();
+    let ers = get_expected_raw_storage_2();
+    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
+    let res = verify_substrate_storage_proof_given_hashes(buffer.span(), buffer_index.span(), get_key_2().span(), get_root_2().span(), get_hashes_2().span()).unwrap();
     // assert(msg.len() == 6400, 'Incorrect hash length');
     // assert(true==false, 'fail');
     // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
@@ -59,6 +91,16 @@ fn test_fail_2() {
 //     0x9eedab01919142839236b4c481d70adbd00080b796fe3a1816368272dfa8570674b8977a0e1a07e5330bfc2398f8aa1293f49a80853351d1a8bd27430a5348468e3377a2ecbcf4c0df15da7f38e4360b27d8eace80c5477b7680b943c66fd61077bdff0eaaa39a3ce070f1318e46f89b4f30603730
 //   ]
 // }
+
+// hashes: [
+//     0x4ee23d258ffd21f2056056550114ea9bd24b4d1e7d8e217146a0ff51ef35fb40
+//     0x177e3df8301cb7013f7416cc6c0facdbeaddded65001adf6973f02d9b0bfad3a
+//     0xb796fe3a1816368272dfa8570674b8977a0e1a07e5330bfc2398f8aa1293f49a
+//     0x0962c9c6baab455860e6b80fd9f672e09b622438f3dfd65a294b4fb038e38c8e
+//     0xfdc56bd3a6e78790edf011e2e7468db8e41cc6ad6a3523b4acc035fc2ff410a2
+//     0xdcb65578717ed86634a8cea32044916248c297218ffb611f693a724381be982f
+//     0xbd80210e32a5313635944b7fea4c10af4b6156143b85984aecaa64b217f4a40a
+// ]
 
 // Expected Raw Storage - dac0c78dd0d92a000000000000000000c6b0015d90be39b67359810100000000
 
@@ -127,6 +169,18 @@ fn get_storage_proof_data() -> (Array<u8>, Array<usize>) {
     (i, index_array)
 }
 
+fn get_hashes() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(0x4e);i.append(0xe2);i.append(0x3d);i.append(0x25);i.append(0x8f);i.append(0xfd);i.append(0x21);i.append(0xf2);i.append(0x05);i.append(0x60);i.append(0x56);i.append(0x55);i.append(0x01);i.append(0x14);i.append(0xea);i.append(0x9b);i.append(0xd2);i.append(0x4b);i.append(0x4d);i.append(0x1e);i.append(0x7d);i.append(0x8e);i.append(0x21);i.append(0x71);i.append(0x46);i.append(0xa0);i.append(0xff);i.append(0x51);i.append(0xef);i.append(0x35);i.append(0xfb);i.append(0x40);
+    i.append(0x17);i.append(0x7e);i.append(0x3d);i.append(0xf8);i.append(0x30);i.append(0x1c);i.append(0xb7);i.append(0x01);i.append(0x3f);i.append(0x74);i.append(0x16);i.append(0xcc);i.append(0x6c);i.append(0x0f);i.append(0xac);i.append(0xdb);i.append(0xea);i.append(0xdd);i.append(0xde);i.append(0xd6);i.append(0x50);i.append(0x01);i.append(0xad);i.append(0xf6);i.append(0x97);i.append(0x3f);i.append(0x02);i.append(0xd9);i.append(0xb0);i.append(0xbf);i.append(0xad);i.append(0x3a);
+    i.append(0xb7);i.append(0x96);i.append(0xfe);i.append(0x3a);i.append(0x18);i.append(0x16);i.append(0x36);i.append(0x82);i.append(0x72);i.append(0xdf);i.append(0xa8);i.append(0x57);i.append(0x06);i.append(0x74);i.append(0xb8);i.append(0x97);i.append(0x7a);i.append(0x0e);i.append(0x1a);i.append(0x07);i.append(0xe5);i.append(0x33);i.append(0x0b);i.append(0xfc);i.append(0x23);i.append(0x98);i.append(0xf8);i.append(0xaa);i.append(0x12);i.append(0x93);i.append(0xf4);i.append(0x9a);
+    i.append(0x09);i.append(0x62);i.append(0xc9);i.append(0xc6);i.append(0xba);i.append(0xab);i.append(0x45);i.append(0x58);i.append(0x60);i.append(0xe6);i.append(0xb8);i.append(0x0f);i.append(0xd9);i.append(0xf6);i.append(0x72);i.append(0xe0);i.append(0x9b);i.append(0x62);i.append(0x24);i.append(0x38);i.append(0xf3);i.append(0xdf);i.append(0xd6);i.append(0x5a);i.append(0x29);i.append(0x4b);i.append(0x4f);i.append(0xb0);i.append(0x38);i.append(0xe3);i.append(0x8c);i.append(0x8e);
+    i.append(0xfd);i.append(0xc5);i.append(0x6b);i.append(0xd3);i.append(0xa6);i.append(0xe7);i.append(0x87);i.append(0x90);i.append(0xed);i.append(0xf0);i.append(0x11);i.append(0xe2);i.append(0xe7);i.append(0x46);i.append(0x8d);i.append(0xb8);i.append(0xe4);i.append(0x1c);i.append(0xc6);i.append(0xad);i.append(0x6a);i.append(0x35);i.append(0x23);i.append(0xb4);i.append(0xac);i.append(0xc0);i.append(0x35);i.append(0xfc);i.append(0x2f);i.append(0xf4);i.append(0x10);i.append(0xa2);
+    i.append(0xdc);i.append(0xb6);i.append(0x55);i.append(0x78);i.append(0x71);i.append(0x7e);i.append(0xd8);i.append(0x66);i.append(0x34);i.append(0xa8);i.append(0xce);i.append(0xa3);i.append(0x20);i.append(0x44);i.append(0x91);i.append(0x62);i.append(0x48);i.append(0xc2);i.append(0x97);i.append(0x21);i.append(0x8f);i.append(0xfb);i.append(0x61);i.append(0x1f);i.append(0x69);i.append(0x3a);i.append(0x72);i.append(0x43);i.append(0x81);i.append(0xbe);i.append(0x98);i.append(0x2f);
+    i.append(0xbd);i.append(0x80);i.append(0x21);i.append(0x0e);i.append(0x32);i.append(0xa5);i.append(0x31);i.append(0x36);i.append(0x35);i.append(0x94);i.append(0x4b);i.append(0x7f);i.append(0xea);i.append(0x4c);i.append(0x10);i.append(0xaf);i.append(0x4b);i.append(0x61);i.append(0x56);i.append(0x14);i.append(0x3b);i.append(0x85);i.append(0x98);i.append(0x4a);i.append(0xec);i.append(0xaa);i.append(0x64);i.append(0xb2);i.append(0x17);i.append(0xf4);i.append(0xa4);i.append(0x0a);
+    i
+}
+
 
 
 // Test case 2
@@ -152,6 +206,15 @@ fn get_storage_proof_data() -> (Array<u8>, Array<usize>) {
 //     0x9f0b3c252fcb29d88eff4f3de5de4476c3ffff809635cc450519ea68c3683df8a8d271526cf910230d9fed1c52ea0e46cea314a0801497e67e826ab0432258be747baf4541d710c20fcb4d3597c9f01832b531ad568040f7533553d97d9810d94f7798d7f7e7ac667b290caa21f1f431ff3e22c521dd80afb618147436a7a52111f9c4ad405bccb1d3e170d5599005de53ce048e4c04d48039c7fc7584cfbf11eaffe099b09f30162dd9575cf83e5d5a3e04faa91ae9a65880223427fa65171dadf3bf1c9eee82e7794f3fea2c47f16c81e2b06925273d304f807eceb39d2b94bbdc25d01f0c4c4a28ffd6691adac31a672771deddca8e439f3b8019f6bbf83aa70d82e6489c1f3ac737a0a9e0786e8ff357d0731e5a2d313ebcdf803c12edecb3572e8da6870d427e04c58a28b4d485d631ffcf5845593f8dfae44f804f09fa704ba88e3ff066179607d058d1db59013c5b9f3e073b9cef43dd6dc15080f4dc62b95745444695ee9c2f81f1e84b35491ae51f6e39261666dff4c8ec181180baefc17d46fe4075ec785133f38e96fbd3997f97a417cd3a6d86f7560e2330c480ff9e561d9b0c6f14ac57b307977e647fdd8e203a257bc6d1094679f7c3c230e9808a49c8d00bd765bcd36345e4d6d4f2df114a51a335dc26f9eea8a0af8b74541e800b5ba1cd07aab1cb5d7974b7140853f61ab0eee81fbd269a550deacac3e9ffd280f24c5b927150f7cbed75ddf886c3d81f000bedbb4a8f14a5893d0dab18021740
 //   ]
 // }
+
+// hashes: [
+//     0x8748ea181040192c04f37cb514ac19d0b3545b96889bac7ef7c56feb115e40f4
+//     0x9d2fb43201646ba9957835ea424ce4e3a9bdd6d9fb7e663e1dd8493e5a0c29c0
+//     0xafb618147436a7a52111f9c4ad405bccb1d3e170d5599005de53ce048e4c04d4
+//     0x47ec5746c039d89786f2cd5335144b2843af9dec5d67972dc7ee290a3d3bce5e
+//     0x155c19264e5617677bc9a637aa7e0a42949852b5dc8ca2dd268a0247e72b4c36
+//     0x8f438cdf6dcd7da2b6bba501f22c25ac3a4afb004fdcaf9d293e900cd00a6cb6
+// ]
 
 fn get_expected_raw_storage_2() -> Array<u8> {
     let mut i: Array<u8> = Default::default();
@@ -212,6 +275,17 @@ fn get_storage_proof_data_2() -> (Array<u8>, Array<usize>) {
     i.append(0x9f);i.append(0x0b);i.append(0x3c);i.append(0x25);i.append(0x2f);i.append(0xcb);i.append(0x29);i.append(0xd8);i.append(0x8e);i.append(0xff);i.append(0x4f);i.append(0x3d);i.append(0xe5);i.append(0xde);i.append(0x44);i.append(0x76);i.append(0xc3);i.append(0xff);i.append(0xff);i.append(0x80);i.append(0x96);i.append(0x35);i.append(0xcc);i.append(0x45);i.append(0x05);i.append(0x19);i.append(0xea);i.append(0x68);i.append(0xc3);i.append(0x68);i.append(0x3d);i.append(0xf8);i.append(0xa8);i.append(0xd2);i.append(0x71);i.append(0x52);i.append(0x6c);i.append(0xf9);i.append(0x10);i.append(0x23);i.append(0x0d);i.append(0x9f);i.append(0xed);i.append(0x1c);i.append(0x52);i.append(0xea);i.append(0x0e);i.append(0x46);i.append(0xce);i.append(0xa3);i.append(0x14);i.append(0xa0);i.append(0x80);i.append(0x14);i.append(0x97);i.append(0xe6);i.append(0x7e);i.append(0x82);i.append(0x6a);i.append(0xb0);i.append(0x43);i.append(0x22);i.append(0x58);i.append(0xbe);i.append(0x74);i.append(0x7b);i.append(0xaf);i.append(0x45);i.append(0x41);i.append(0xd7);i.append(0x10);i.append(0xc2);i.append(0x0f);i.append(0xcb);i.append(0x4d);i.append(0x35);i.append(0x97);i.append(0xc9);i.append(0xf0);i.append(0x18);i.append(0x32);i.append(0xb5);i.append(0x31);i.append(0xad);i.append(0x56);i.append(0x80);i.append(0x40);i.append(0xf7);i.append(0x53);i.append(0x35);i.append(0x53);i.append(0xd9);i.append(0x7d);i.append(0x98);i.append(0x10);i.append(0xd9);i.append(0x4f);i.append(0x77);i.append(0x98);i.append(0xd7);i.append(0xf7);i.append(0xe7);i.append(0xac);i.append(0x66);i.append(0x7b);i.append(0x29);i.append(0x0c);i.append(0xaa);i.append(0x21);i.append(0xf1);i.append(0xf4);i.append(0x31);i.append(0xff);i.append(0x3e);i.append(0x22);i.append(0xc5);i.append(0x21);i.append(0xdd);i.append(0x80);i.append(0xaf);i.append(0xb6);i.append(0x18);i.append(0x14);i.append(0x74);i.append(0x36);i.append(0xa7);i.append(0xa5);i.append(0x21);i.append(0x11);i.append(0xf9);i.append(0xc4);i.append(0xad);i.append(0x40);i.append(0x5b);i.append(0xcc);i.append(0xb1);i.append(0xd3);i.append(0xe1);i.append(0x70);i.append(0xd5);i.append(0x59);i.append(0x90);i.append(0x05);i.append(0xde);i.append(0x53);i.append(0xce);i.append(0x04);i.append(0x8e);i.append(0x4c);i.append(0x04);i.append(0xd4);i.append(0x80);i.append(0x39);i.append(0xc7);i.append(0xfc);i.append(0x75);i.append(0x84);i.append(0xcf);i.append(0xbf);i.append(0x11);i.append(0xea);i.append(0xff);i.append(0xe0);i.append(0x99);i.append(0xb0);i.append(0x9f);i.append(0x30);i.append(0x16);i.append(0x2d);i.append(0xd9);i.append(0x57);i.append(0x5c);i.append(0xf8);i.append(0x3e);i.append(0x5d);i.append(0x5a);i.append(0x3e);i.append(0x04);i.append(0xfa);i.append(0xa9);i.append(0x1a);i.append(0xe9);i.append(0xa6);i.append(0x58);i.append(0x80);i.append(0x22);i.append(0x34);i.append(0x27);i.append(0xfa);i.append(0x65);i.append(0x17);i.append(0x1d);i.append(0xad);i.append(0xf3);i.append(0xbf);i.append(0x1c);i.append(0x9e);i.append(0xee);i.append(0x82);i.append(0xe7);i.append(0x79);i.append(0x4f);i.append(0x3f);i.append(0xea);i.append(0x2c);i.append(0x47);i.append(0xf1);i.append(0x6c);i.append(0x81);i.append(0xe2);i.append(0xb0);i.append(0x69);i.append(0x25);i.append(0x27);i.append(0x3d);i.append(0x30);i.append(0x4f);i.append(0x80);i.append(0x7e);i.append(0xce);i.append(0xb3);i.append(0x9d);i.append(0x2b);i.append(0x94);i.append(0xbb);i.append(0xdc);i.append(0x25);i.append(0xd0);i.append(0x1f);i.append(0x0c);i.append(0x4c);i.append(0x4a);i.append(0x28);i.append(0xff);i.append(0xd6);i.append(0x69);i.append(0x1a);i.append(0xda);i.append(0xc3);i.append(0x1a);i.append(0x67);i.append(0x27);i.append(0x71);i.append(0xde);i.append(0xdd);i.append(0xca);i.append(0x8e);i.append(0x43);i.append(0x9f);i.append(0x3b);i.append(0x80);i.append(0x19);i.append(0xf6);i.append(0xbb);i.append(0xf8);i.append(0x3a);i.append(0xa7);i.append(0x0d);i.append(0x82);i.append(0xe6);i.append(0x48);i.append(0x9c);i.append(0x1f);i.append(0x3a);i.append(0xc7);i.append(0x37);i.append(0xa0);i.append(0xa9);i.append(0xe0);i.append(0x78);i.append(0x6e);i.append(0x8f);i.append(0xf3);i.append(0x57);i.append(0xd0);i.append(0x73);i.append(0x1e);i.append(0x5a);i.append(0x2d);i.append(0x31);i.append(0x3e);i.append(0xbc);i.append(0xdf);i.append(0x80);i.append(0x3c);i.append(0x12);i.append(0xed);i.append(0xec);i.append(0xb3);i.append(0x57);i.append(0x2e);i.append(0x8d);i.append(0xa6);i.append(0x87);i.append(0x0d);i.append(0x42);i.append(0x7e);i.append(0x04);i.append(0xc5);i.append(0x8a);i.append(0x28);i.append(0xb4);i.append(0xd4);i.append(0x85);i.append(0xd6);i.append(0x31);i.append(0xff);i.append(0xcf);i.append(0x58);i.append(0x45);i.append(0x59);i.append(0x3f);i.append(0x8d);i.append(0xfa);i.append(0xe4);i.append(0x4f);i.append(0x80);i.append(0x4f);i.append(0x09);i.append(0xfa);i.append(0x70);i.append(0x4b);i.append(0xa8);i.append(0x8e);i.append(0x3f);i.append(0xf0);i.append(0x66);i.append(0x17);i.append(0x96);i.append(0x07);i.append(0xd0);i.append(0x58);i.append(0xd1);i.append(0xdb);i.append(0x59);i.append(0x01);i.append(0x3c);i.append(0x5b);i.append(0x9f);i.append(0x3e);i.append(0x07);i.append(0x3b);i.append(0x9c);i.append(0xef);i.append(0x43);i.append(0xdd);i.append(0x6d);i.append(0xc1);i.append(0x50);i.append(0x80);i.append(0xf4);i.append(0xdc);i.append(0x62);i.append(0xb9);i.append(0x57);i.append(0x45);i.append(0x44);i.append(0x46);i.append(0x95);i.append(0xee);i.append(0x9c);i.append(0x2f);i.append(0x81);i.append(0xf1);i.append(0xe8);i.append(0x4b);i.append(0x35);i.append(0x49);i.append(0x1a);i.append(0xe5);i.append(0x1f);i.append(0x6e);i.append(0x39);i.append(0x26);i.append(0x16);i.append(0x66);i.append(0xdf);i.append(0xf4);i.append(0xc8);i.append(0xec);i.append(0x18);i.append(0x11);i.append(0x80);i.append(0xba);i.append(0xef);i.append(0xc1);i.append(0x7d);i.append(0x46);i.append(0xfe);i.append(0x40);i.append(0x75);i.append(0xec);i.append(0x78);i.append(0x51);i.append(0x33);i.append(0xf3);i.append(0x8e);i.append(0x96);i.append(0xfb);i.append(0xd3);i.append(0x99);i.append(0x7f);i.append(0x97);i.append(0xa4);i.append(0x17);i.append(0xcd);i.append(0x3a);i.append(0x6d);i.append(0x86);i.append(0xf7);i.append(0x56);i.append(0x0e);i.append(0x23);i.append(0x30);i.append(0xc4);i.append(0x80);i.append(0xff);i.append(0x9e);i.append(0x56);i.append(0x1d);i.append(0x9b);i.append(0x0c);i.append(0x6f);i.append(0x14);i.append(0xac);i.append(0x57);i.append(0xb3);i.append(0x07);i.append(0x97);i.append(0x7e);i.append(0x64);i.append(0x7f);i.append(0xdd);i.append(0x8e);i.append(0x20);i.append(0x3a);i.append(0x25);i.append(0x7b);i.append(0xc6);i.append(0xd1);i.append(0x09);i.append(0x46);i.append(0x79);i.append(0xf7);i.append(0xc3);i.append(0xc2);i.append(0x30);i.append(0xe9);i.append(0x80);i.append(0x8a);i.append(0x49);i.append(0xc8);i.append(0xd0);i.append(0x0b);i.append(0xd7);i.append(0x65);i.append(0xbc);i.append(0xd3);i.append(0x63);i.append(0x45);i.append(0xe4);i.append(0xd6);i.append(0xd4);i.append(0xf2);i.append(0xdf);i.append(0x11);i.append(0x4a);i.append(0x51);i.append(0xa3);i.append(0x35);i.append(0xdc);i.append(0x26);i.append(0xf9);i.append(0xee);i.append(0xa8);i.append(0xa0);i.append(0xaf);i.append(0x8b);i.append(0x74);i.append(0x54);i.append(0x1e);i.append(0x80);i.append(0x0b);i.append(0x5b);i.append(0xa1);i.append(0xcd);i.append(0x07);i.append(0xaa);i.append(0xb1);i.append(0xcb);i.append(0x5d);i.append(0x79);i.append(0x74);i.append(0xb7);i.append(0x14);i.append(0x08);i.append(0x53);i.append(0xf6);i.append(0x1a);i.append(0xb0);i.append(0xee);i.append(0xe8);i.append(0x1f);i.append(0xbd);i.append(0x26);i.append(0x9a);i.append(0x55);i.append(0x0d);i.append(0xea);i.append(0xca);i.append(0xc3);i.append(0xe9);i.append(0xff);i.append(0xd2);i.append(0x80);i.append(0xf2);i.append(0x4c);i.append(0x5b);i.append(0x92);i.append(0x71);i.append(0x50);i.append(0xf7);i.append(0xcb);i.append(0xed);i.append(0x75);i.append(0xdd);i.append(0xf8);i.append(0x86);i.append(0xc3);i.append(0xd8);i.append(0x1f);i.append(0x00);i.append(0x0b);i.append(0xed);i.append(0xbb);i.append(0x4a);i.append(0x8f);i.append(0x14);i.append(0xa5);i.append(0x89);i.append(0x3d);i.append(0x0d);i.append(0xab);i.append(0x18);i.append(0x02);i.append(0x17);i.append(0x40);
 
     (i, index_array)
+}
+
+fn get_hashes_2() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(0x87);i.append(0x48);i.append(0xea);i.append(0x18);i.append(0x10);i.append(0x40);i.append(0x19);i.append(0x2c);i.append(0x04);i.append(0xf3);i.append(0x7c);i.append(0xb5);i.append(0x14);i.append(0xac);i.append(0x19);i.append(0xd0);i.append(0xb3);i.append(0x54);i.append(0x5b);i.append(0x96);i.append(0x88);i.append(0x9b);i.append(0xac);i.append(0x7e);i.append(0xf7);i.append(0xc5);i.append(0x6f);i.append(0xeb);i.append(0x11);i.append(0x5e);i.append(0x40);i.append(0xf4);  
+    i.append(0x9d);i.append(0x2f);i.append(0xb4);i.append(0x32);i.append(0x01);i.append(0x64);i.append(0x6b);i.append(0xa9);i.append(0x95);i.append(0x78);i.append(0x35);i.append(0xea);i.append(0x42);i.append(0x4c);i.append(0xe4);i.append(0xe3);i.append(0xa9);i.append(0xbd);i.append(0xd6);i.append(0xd9);i.append(0xfb);i.append(0x7e);i.append(0x66);i.append(0x3e);i.append(0x1d);i.append(0xd8);i.append(0x49);i.append(0x3e);i.append(0x5a);i.append(0x0c);i.append(0x29);i.append(0xc0);
+    i.append(0xaf);i.append(0xb6);i.append(0x18);i.append(0x14);i.append(0x74);i.append(0x36);i.append(0xa7);i.append(0xa5);i.append(0x21);i.append(0x11);i.append(0xf9);i.append(0xc4);i.append(0xad);i.append(0x40);i.append(0x5b);i.append(0xcc);i.append(0xb1);i.append(0xd3);i.append(0xe1);i.append(0x70);i.append(0xd5);i.append(0x59);i.append(0x90);i.append(0x05);i.append(0xde);i.append(0x53);i.append(0xce);i.append(0x04);i.append(0x8e);i.append(0x4c);i.append(0x04);i.append(0xd4);
+    i.append(0x47);i.append(0xec);i.append(0x57);i.append(0x46);i.append(0xc0);i.append(0x39);i.append(0xd8);i.append(0x97);i.append(0x86);i.append(0xf2);i.append(0xcd);i.append(0x53);i.append(0x35);i.append(0x14);i.append(0x4b);i.append(0x28);i.append(0x43);i.append(0xaf);i.append(0x9d);i.append(0xec);i.append(0x5d);i.append(0x67);i.append(0x97);i.append(0x2d);i.append(0xc7);i.append(0xee);i.append(0x29);i.append(0x0a);i.append(0x3d);i.append(0x3b);i.append(0xce);i.append(0x5e);
+    i.append(0x15);i.append(0x5c);i.append(0x19);i.append(0x26);i.append(0x4e);i.append(0x56);i.append(0x17);i.append(0x67);i.append(0x7b);i.append(0xc9);i.append(0xa6);i.append(0x37);i.append(0xaa);i.append(0x7e);i.append(0x0a);i.append(0x42);i.append(0x94);i.append(0x98);i.append(0x52);i.append(0xb5);i.append(0xdc);i.append(0x8c);i.append(0xa2);i.append(0xdd);i.append(0x26);i.append(0x8a);i.append(0x02);i.append(0x47);i.append(0xe7);i.append(0x2b);i.append(0x4c);i.append(0x36);
+    i.append(0x8f);i.append(0x43);i.append(0x8c);i.append(0xdf);i.append(0x6d);i.append(0xcd);i.append(0x7d);i.append(0xa2);i.append(0xb6);i.append(0xbb);i.append(0xa5);i.append(0x01);i.append(0xf2);i.append(0x2c);i.append(0x25);i.append(0xac);i.append(0x3a);i.append(0x4a);i.append(0xfb);i.append(0x00);i.append(0x4f);i.append(0xdc);i.append(0xaf);i.append(0x9d);i.append(0x29);i.append(0x3e);i.append(0x90);i.append(0x0c);i.append(0xd0);i.append(0x0a);i.append(0x6c);i.append(0xb6);
+    i
 }
 
 // [133,4,179,187,69,3,191,6,228,196,117,43,20,69,29,151,97,34,32,105,25,73,133,113,66,112,31,147,124,133,89,200,35,35,194,96,175,0,213,95,247,51,101,194,142,226,223,52,13'),132,12,236,68,4,6,5,118,138,112,236,61,170,169,219,37,240,111,76,99,240,157,189,222,69,61,119,9,211,179,215,215,64,218,81,172,95,3,170,223,82,235,37,173,249,109,225,193,97,228,30,254,40,12,6,97,117,114,97,32,158,231,101,8('),0,0,0,0,0,4,0,5,97,117,114,97,1,1,196,188,52,135,188,93,60,154,1,194,171,154,54,105,147,98,22,139,34,202,54,79,38,21,226,55,130,199,107,97,92,90,138,144,235,4,140,68,64,186,166,125,3,88,33,22,78,168,77,135,148,128,211,161,127,157,238,4,230,194,175,216,19,133,140,152,147,22,36,11,181,29,150,84,188,195,154,246,45,193,226,52,121,9,134,219,99,194,155,134,87,72,131,186,24,37,72,99,216,113,183,219,113,81,133,143,73,130,183,42,118,'),27('5,163,94,8('),216,12,202,88,104,248,9,185,87,89,37,246,69,26,123,117,39,53,171,27('15,52,234,70,18,133,12,0,0,0,0,]

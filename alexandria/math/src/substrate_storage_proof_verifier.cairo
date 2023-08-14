@@ -115,6 +115,22 @@ struct Slice<T>{
     range: Range,
 }
 
+fn verify_substrate_storage_proof_given_hashes(buffer: Span<u8>, buffer_node_index: Span<usize>, key: Span<u8>, root: Span<u8>, hashes: Span<u8>) -> Result<Slice<u8>,felt252>{
+	if hashes.len() != (HASH_LENGTH*buffer_node_index.len()){
+			return Result::Err('Bad Hashes Array');
+		};
+
+	// assert(false, 'assert false 1');
+	lookup_value(buffer, buffer_node_index, key, hashes, root)
+
+	// // let hashes_span = hashes.span();
+
+	// // let res =  lookup_value(buffer, buffer_node_index, key, hashes_span, root).unwrap();
+	// // Result::Ok(res.span)
+	// key
+	// Result::Err('Dummy')
+}
+
 fn verify_substrate_storage_proof(buffer: Span<u8>, buffer_node_index: Span<usize>, key: Span<u8>, root: Span<u8>) -> Result<Slice<u8>,felt252>{
 	let mut hashes = ArrayTrait::<u8>::new();
 	let mut hash = ArrayTrait::<u8>::new().span();
