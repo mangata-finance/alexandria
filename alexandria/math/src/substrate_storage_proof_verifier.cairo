@@ -110,16 +110,54 @@ fn verify_substrate_storage_proof_given_hashes(buffer: Span<u8>, buffer_node_ind
 			return Result::Err('Bad Hashes Array');
 		};
 
-	// assert(false, 'assert false 1');
 	lookup_value(buffer, buffer_node_index, key, hashes, root)
-
-	// // let hashes_span = hashes.span();
-
-	// // let res =  lookup_value(buffer, buffer_node_index, key, hashes_span, root).unwrap();
-	// // Result::Ok(res.span)
-	// key
-	// Result::Err('Dummy')
 }
+
+// fn verify_substrate_storage_proof_given_hashes_clone_test(buffer: Span<u8>, buffer_node_index: Span<usize>, key: Span<u8>, root: Span<u8>, hashes: Span<u8>) -> Result<Slice<u8>,felt252>{
+// 	if hashes.len() != (HASH_LENGTH*buffer_node_index.len()){
+// 			return Result::Err('Bad Hashes Array');
+// 		};
+
+// 	let mut hashesx = ArrayTrait::<u8>::new();
+// 	let mut hash = ArrayTrait::<u8>::new().span();
+// 	let mut encoded_node = ArrayTrait::<u8>::new();
+// 	let mut itr: usize = 0;
+// 	let maybe_err = loop{
+// 		if itr== buffer_node_index.len(){
+// 			break Result::Ok(());
+// 		};
+
+// 		let mut encoded_node = ArrayTrait::<u8>::new();
+
+// 		if itr == (buffer_node_index.len() -1) {
+// 			encoded_node = get_array_from_span(buffer, Range{start:*buffer_node_index.at(itr), end:buffer.len()});
+// 		} else {
+// 			encoded_node = get_array_from_span(buffer, Range{start:*buffer_node_index.at(itr), end:*buffer_node_index.at(itr+1)});
+// 		};
+// 		let xyz = *encoded_node.at(0);
+// 		// hash = blake2b(encoded_node).span();
+// 		// if hash.len() != HASH_LENGTH{
+// 		// 	break Result::Err('Bad Hasher Output');
+// 		// }
+
+// 		let mut itr2 =0;
+// 		loop{
+// 			if itr2==HASH_LENGTH{
+// 				break;
+// 			};
+// 			hashesx.append(*hashes.at(itr2));
+// 			itr2 = itr2 + 1;
+// 		};
+// 		itr = itr +1;
+// 	};
+
+// 	match maybe_err {
+// 		Result::Ok(_) => {},
+// 		Result::Err(e) => {return Result::Err(e);}
+// 	};
+
+// 	lookup_value(buffer, buffer_node_index, key, hashes, root)
+// }
 
 fn verify_substrate_storage_proof(buffer: Span<u8>, buffer_node_index: Span<usize>, key: Span<u8>, root: Span<u8>) -> Result<Slice<u8>,felt252>{
 	let mut hashes = ArrayTrait::<u8>::new();
@@ -134,9 +172,9 @@ fn verify_substrate_storage_proof(buffer: Span<u8>, buffer_node_index: Span<usiz
 		let mut encoded_node = ArrayTrait::<u8>::new();
 
 		if itr == (buffer_node_index.len() -1) {
-			encoded_node = get_array_from_span(buffer, *buffer_node_index.at(itr), buffer.len());
+			encoded_node = get_array_from_span(buffer, Range{start:*buffer_node_index.at(itr), end:buffer.len()});
 		} else {
-			encoded_node = get_array_from_span(buffer, *buffer_node_index.at(itr), *buffer_node_index.at(itr+1));
+			encoded_node = get_array_from_span(buffer, Range{start:*buffer_node_index.at(itr), end:*buffer_node_index.at(itr+1)});
 		};
 		hash = blake2b(encoded_node).span();
 		if hash.len() != HASH_LENGTH{
@@ -163,25 +201,14 @@ fn verify_substrate_storage_proof(buffer: Span<u8>, buffer_node_index: Span<usiz
 			return Result::Err('Bad Hashes Array');
 		};
 
-
-	// assert(false, 'assert false 1');
 	lookup_value(buffer, buffer_node_index, key, hashes.span(), root)
-
-	// // let hashes_span = hashes.span();
-
-	// // let res =  lookup_value(buffer, buffer_node_index, key, hashes_span, root).unwrap();
-	// // Result::Ok(res.span)
-	// key
-	// Result::Err('Dummy')
 }
 
-// TODO
-// use range instead of start and end maybe
-fn get_array_from_span(buffer: Span<u8>, start: usize, end: usize) -> Array<u8>{
-	let mut itr = start;
+fn get_array_from_span(buffer: Span<u8>, range: Range) -> Array<u8>{
+	let mut itr = range.start;
 	let mut array_op = ArrayTrait::<u8>::new();
 	loop{
-		if itr == end{
+		if itr == range.end{
 			break;
 		}
 		array_op.append(*buffer.at(itr));
@@ -192,13 +219,8 @@ fn get_array_from_span(buffer: Span<u8>, start: usize, end: usize) -> Array<u8>{
 
 fn u8_array_eq(x: Span<u8>, y: Span<u8>) -> bool {
 	if x.len() != y.len(){
-	// x.len().print();
-	// y.len().print();
 		return false;
 	}
-
-	// x.len().print();
-	// y.len().print();
 
 	let mut itr = 0;
 	let mut eq = true;
@@ -507,7 +529,6 @@ fn get_node(hash: Slice<u8>, hashes: Span<u8>, buffer: Span<u8>, buffer_index: S
 
 fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 
-    // let encoded_node: Slice<u8> = buffer;
     let mut offset: usize = buffer.range.start;
 	
     let header = decode_header(buffer, ref offset).unwrap();

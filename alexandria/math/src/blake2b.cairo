@@ -11,7 +11,7 @@ const U64_BIT_NUM: u64 = 64;
 
 const NUM_OF_ROUNDS: u64 = 12;
 
-const SIGMA_WIDTH: u8 = 16;
+const SIGMA_WIDTH: usize = 16;
 
 // We assume no key, and omit impl for it
 const KEY_LENGTH: u8 = 0;
@@ -20,7 +20,6 @@ const OUT_LENGTH: u8 = 32;
 
 // const OUT_LENGTH: u8 = 64;
 
-// const WORD_LENGTH: u8 = 64;
 
 
 // TODO 
@@ -58,50 +57,49 @@ fn u64_xor(x: u64, y: u64) -> u64 {
     xor.try_into().unwrap()
 }
 
-// fn u64_xor_test(x: u64, y: u64) -> u64 {
-//     // let (a, xor, c) = bitwise(
-//     //     x.into(),
-//     //     y.into()
-//     // );
-//     // if true{
-//     // panic_with_felt252(c.into());
-//     // }
-//     // xor.try_into().unwrap()
-//     let a: u128 = upcast(x);
-//     if true{
-//     panic_with_felt252(a.into());
-//     }
-//     let b: u128 = upcast(y);
-//     let c:u128 = a^b;
-//     if true{
-//     panic_with_felt252(c.into());
-//     }
-//     c.try_into().unwrap()
-// }
+fn u64_or(x: u64, y: u64) -> u64 {
+    let (_, _, or) = bitwise(
+        x.into(),
+        y.into()
+    );
+    or.try_into().unwrap()
+}
+
+fn u64_and(x: u64, y: u64) -> u64 {
+    let (and, _, _) = bitwise(
+        x.into(),
+        y.into()
+    );
+    and.try_into().unwrap()
+}
 
 // x and y have to be little endian here
 fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
     let mut v_a = *v.at(a.into()); let mut v_b = *v.at(b.into()); let mut v_c = *v.at(c.into()); let mut v_d = *v.at(d.into());
 
     v_a = u64_wrapping_add(v_a, u64_wrapping_add(v_b, x));
-    // if true{
-    // panic_with_felt252(v_a.into());
-    // }
-    // if true{
-    // panic_with_felt252(u64_xor(v_d, v_a).into());
-    // }
-    v_d = u64_rotr(u64_xor(v_d, v_a), 32);
-// if true{
-//     panic_with_felt252(v_d.into());
-//     }
+
+    let v_d_xor_v_a = u64_xor(v_d, v_a);
+    // 2^32 = 4294967296
+    v_d = u64_or(v_d_xor_v_a/4294967296, TryInto::<u128,u64>::try_into((Into::<u64,u128>::into(v_d_xor_v_a) * 4294967296) % BoundedInt::<u64>::max().into()).unwrap());
+    
     v_c = u64_wrapping_add(v_c, v_d);
-    v_b = u64_rotr(u64_xor(v_b, v_c), 24);
+
+    let v_b_xor_v_c = u64_xor(v_b, v_c);
+    // 2^24 = 16777216, 2^40 = 1099511627776
+    v_b = u64_or(v_b_xor_v_c/16777216, TryInto::<u128,u64>::try_into((Into::<u64,u128>::into(v_b_xor_v_c) * 1099511627776) % BoundedInt::<u64>::max().into()).unwrap());
 
     v_a = u64_wrapping_add(v_a, u64_wrapping_add(v_b, y));
-    v_d = u64_rotr(u64_xor(v_d, v_a), 16);
+
+    let v_d_xor_v_a = u64_xor(v_d, v_a);
+    // 2^16 = 65536, 2^48 = 281474976710656
+    v_d = u64_or(v_d_xor_v_a/65536, TryInto::<u128,u64>::try_into((Into::<u64,u128>::into(v_d_xor_v_a) * 281474976710656) % BoundedInt::<u64>::max().into()).unwrap());
 
     v_c = u64_wrapping_add(v_c, v_d);
-    v_b = u64_rotr(u64_xor(v_b, v_c), 63);
+
+    let v_b_xor_v_c = u64_xor(v_b, v_c);
+    // 2^63 = 9223372036854775808, 2^1 = 2
+    v_b = u64_or(v_b_xor_v_c/9223372036854775808, TryInto::<u128,u64>::try_into((Into::<u64,u128>::into(v_b_xor_v_c) * 2) % BoundedInt::<u64>::max().into()).unwrap());
 
     let mut v_new = ArrayTrait::<u64>::new();
     let mut i: u8 = 0;
@@ -128,12 +126,9 @@ fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
     v_new
 }
 
-// each u64 of m has to be little endian here
+// each u64 of b has to be little endian here
 fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<u64> {
 
-    // if itr == 1{
-    // panic(convert_u64_array_to_felt252_array(h));
-    // }
     let iv = get_iv();
     let mut v = ArrayTrait::<u64>::new();
     let mut i: u8 = 0;
@@ -146,13 +141,6 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
 
         i=i+1;
     };
-
-    // if true{
-    // panic_with_felt252((*iv.at(4)).into());
-    // }
-    // if true{
-    // panic_with_felt252(t0.into());
-    // }
 
     i = 0;
     loop {
@@ -180,82 +168,19 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
     i=0;
     let v7 = loop{
         
-        let s = get_s_from_sigma(i);
+        let s_select: usize = (i%10).into();
+        let s_pointer: usize = SIGMA_WIDTH * s_select;
 
-        assert(s.len()==16, 's.len==16 assert');
+        let v0 = G(v.span() , 0,4,8,12,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 1)).into()).try_into().unwrap()));
+        let v1 = G(v0.span(), 1,5,9,13,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 3)).into()).try_into().unwrap()));
+        let v2 = G(v1.span(), 2,6,10,14, *b.at((itr*16 + (*get_sigma().at(s_pointer + 4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 5)).into()).try_into().unwrap()));
+        let v3 = G(v2.span(), 3,7,11,15, *b.at((itr*16 + (*get_sigma().at(s_pointer + 6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 7)).into()).try_into().unwrap()));
 
-    // if true{
-    // panic(convert_u8_array_to_felt252_array(s.span()));
-    // }
+        let v4 = G(v3.span(), 0,5,10,15, *b.at((itr*16 + (*get_sigma().at(s_pointer + 8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 9)).into()).try_into().unwrap()));
+        let v5 = G(v4.span(), 1,6,11,12, *b.at((itr*16 + (*get_sigma().at(s_pointer + 10)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 11)).into()).try_into().unwrap()));
+        let v6 = G(v5.span(), 2,7,8,13,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 12)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 13)).into()).try_into().unwrap()));
+        let v7 = G(v6.span(), 3,4,9,14,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 14)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 15)).into()).try_into().unwrap()));
 
-        // The whole following chunk can be optimized no need to copy and pass around the entire array
-        // The each half does not edit or use any of the same values
-
-        // TODO
-        // Make m little endian here
-        // or maybe earlier
-    //     if true{
-    // panic(convert_u64_array_to_felt252_array(v.span()));
-    // }
-
-        // if i==1{
-        //     // [14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3]
-        //     let v0 = G(v.span() , 0,4,8,12,  *b.at(14) , *b.at(10));
-        //     let v1 = G(v0.span(), 1,5,9,13,  *b.at(4) , *b.at(8));
-        //     let v2 = G(v1.span(), 2,6,10,14, *b.at(9), *b.at(15));
-        //     let v3 = G(v2.span(), 3,7,11,15, *b.at(13) , *b.at(6));
-
-        //     let v4 = G(v3.span(), 0,5,10,15, *b.at(1) , *b.at(12));
-        //     let v5 = G(v4.span(), 1,6,11,12, *b.at(0), *b.at(2));
-        //     let v6 = G(v5.span(), 2,7,8,13,  *b.at(11), *b.at(7));
-        //     let v7 = G(v6.span(), 3,4,9,14,  *b.at(5), *b.at(3));
-        //         if true{
-        //             // if true{panic_with_felt252(0);}
-        //         panic(convert_u64_array_to_felt252_array(v7.span()));
-        //         }
-        // }
-
-        let v0 = G(v.span() , 0,4,8,12,  *b.at((itr*16 + (*s.at(0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*s.at(1)).into()).try_into().unwrap()));
-        let v1 = G(v0.span(), 1,5,9,13,  *b.at((itr*16 + (*s.at(2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*s.at(3)).into()).try_into().unwrap()));
-        let v2 = G(v1.span(), 2,6,10,14, *b.at((itr*16 + (*s.at(4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*s.at(5)).into()).try_into().unwrap()));
-        let v3 = G(v2.span(), 3,7,11,15, *b.at((itr*16 + (*s.at(6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*s.at(7)).into()).try_into().unwrap()));
-
-        let v4 = G(v3.span(), 0,5,10,15, *b.at((itr*16 + (*s.at(8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*s.at(9)).into()).try_into().unwrap()));
-        let v5 = G(v4.span(), 1,6,11,12, *b.at((itr*16 + (*s.at(10)).into()).try_into().unwrap()), *b.at((itr*16 + (*s.at(11)).into()).try_into().unwrap()));
-        let v6 = G(v5.span(), 2,7,8,13,  *b.at((itr*16 + (*s.at(12)).into()).try_into().unwrap()), *b.at((itr*16 + (*s.at(13)).into()).try_into().unwrap()));
-        let v7 = G(v6.span(), 3,4,9,14,  *b.at((itr*16 + (*s.at(14)).into()).try_into().unwrap()), *b.at((itr*16 + (*s.at(15)).into()).try_into().unwrap()));
-
-    //     let v0 = G(v.span() , 0,4,8,12,  *b.at(0) , *b.at(1));
-    // //     if true{
-    // // panic(convert_u64_array_to_felt252_array(v0.span()));
-    // // }
-    //     let v1 = G(v0.span(), 1,5,9,13,  *b.at(2) , *b.at(3));
-    //     let v2 = G(v1.span(), 2,6,10,14, *b.at(4), *b.at(5));
-    //     let v3 = G(v2.span(), 3,7,11,15, *b.at(6) , *b.at(7));
-
-    //     let v4 = G(v3.span(), 0,5,10,15, *b.at(8) , *b.at(9));
-    //     let v5 = G(v4.span(), 1,6,11,12, *b.at(10), *b.at(11));
-    //     let v6 = G(v5.span(), 2,7,8,13,  *b.at(12), *b.at(13));
-    //     let v7 = G(v6.span(), 3,4,9,14,  *b.at(14), *b.at(15));
-        // if i==1{
-        //     // [14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3]
-        //     let v0 = G(v.span() , 0,4,8,12,  *b.at(14) , *b.at(10));
-        //     let v1 = G(v0.span(), 1,5,9,13,  *b.at(4) , *b.at(8));
-        //     let v2 = G(v1.span(), 2,6,10,14, *b.at(9), *b.at(15));
-        //     let v3 = G(v2.span(), 3,7,11,15, *b.at(13) , *b.at(6));
-
-        //     let v4 = G(v3.span(), 0,5,10,15, *b.at(1) , *b.at(12));
-        //     let v5 = G(v4.span(), 1,6,11,12, *b.at(0), *b.at(2));
-        //     let v6 = G(v5.span(), 2,7,8,13,  *b.at(11), *b.at(7));
-        //     let v7 = G(v6.span(), 3,4,9,14,  *b.at(5), *b.at(3));
-        //         if true{
-        //             // if true{panic_with_felt252(0);}
-        //         panic(convert_u64_array_to_felt252_array(v7.span()));
-        //         }
-        // }
-    //     if true{
-    // panic(convert_u64_array_to_felt252_array(v7.span()));
-    // }
         v=v7.clone();
         i=i+1;
         if i.into() == NUM_OF_ROUNDS{
@@ -263,9 +188,6 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
         };
     };
 
-    // if true{
-    //     panic(convert_u64_array_to_felt252_array(v7.span()));
-    // }
 
     let mut h_new = ArrayTrait::<u64>::new();
     i=0;
@@ -276,26 +198,8 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
         h_new.append(u64_xor(u64_xor(*h.at(i.into()), *v7.at(i.into())), *v7.at(8+i.into())));
         i=i+1;
     };
-    // if itr == 0{
-    // panic(convert_u64_array_to_felt252_array(h_new.span()));
-    // }
+
     h_new
-}
-
-// Or just use indexing and use sigma directly this is wasteful
-fn get_s_from_sigma(i: u8) -> Array<u8>{
-    let mut s = ArrayTrait::<u8>::new();
-    let s_select = i % 10;
-    let mut itr:u8 = 0;
-    loop{
-        if itr == 16{
-            break;
-        }
-        s.append(*get_sigma().at(SIGMA_WIDTH.into() * s_select.into() + itr.into()));
-        itr=itr+1;
-    };
-
-    s
 }
 
 fn add_padding(ref b: Array<u8>) {
@@ -317,14 +221,16 @@ fn get_b_u64_le(data: Span<u8>) -> Array<u64> {
         if (i >= data.len()) {
             break ();
         }
-        let new_u64_as_128 = (shl((*data[i + 7]).into(), 56)
-            + shl((*data[i + 6]).into(), 48)
-            + shl((*data[i + 5]).into(), 40)
-            + shl((*data[i + 4]).into(), 32)
-            + shl((*data[i + 3]).into(), 24)
-            + shl((*data[i + 2]).into(), 16)
-            + shl((*data[i + 1]).into(), 8)
-            + shl((*data[i + 0]).into(), 0));
+        let new_u64_as_128 = (
+            (Into::<u8, u128>::into(*data[i + 7])*72057594037927936_u128)
+            + (Into::<u8, u128>::into(*data[i + 6])*281474976710656_u128)
+            + (Into::<u8, u128>::into(*data[i + 5])*1099511627776_u128)
+            + (Into::<u8, u128>::into(*data[i + 4])*4294967296_u128)
+            + (Into::<u8, u128>::into(*data[i + 3])*16777216_u128)
+            + (Into::<u8, u128>::into(*data[i + 2])*65536_u128)
+            + (Into::<u8, u128>::into(*data[i + 1])*256_u128)
+            + (Into::<u8, u128>::into(*data[i + 0]))
+            );
         b_u64_le.append(TryInto::<u128,u64>::try_into(new_u64_as_128).unwrap());
         i += 8;
     };
@@ -339,51 +245,52 @@ fn get_out_u8_be(data: Span<u64>) -> Array<u8> {
         if i == OUT_LENGTH.into()/8 {
             break ();
         }
+        let element_u128:u128 = (*data.at(i)).into();
         arr
             .append(
-                (shr((*data.at(i)).into(), 0) & BoundedInt::<u8>::max().into())
+                (element_u128 & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 8) & BoundedInt::<u8>::max().into())
+                ((element_u128/256_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 16) & BoundedInt::<u8>::max().into())
+                ((element_u128/65536_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 24) & BoundedInt::<u8>::max().into())
+                ((element_u128/16777216_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 32) & BoundedInt::<u8>::max().into())
+                ((element_u128/4294967296_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 40) & BoundedInt::<u8>::max().into())
+                ((element_u128/1099511627776_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 48) & BoundedInt::<u8>::max().into())
+                ((element_u128/281474976710656_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
         arr
             .append(
-                (shr((*data.at(i)).into(), 56) & BoundedInt::<u8>::max().into())
+                ((element_u128/72057594037927936_u128) & BoundedInt::<u8>::max().into())
                     .try_into()
                     .unwrap()
             );
@@ -394,12 +301,17 @@ fn get_out_u8_be(data: Span<u64>) -> Array<u8> {
 
 fn blake2b(mut b: Array<u8>) -> Array<u8> {
 
-    // Check for length of input
-
     let iv = get_iv();
 
     let mut h = ArrayTrait::<u64>::new();
-    h.append(u64_xor(u64_xor(u64_xor(*iv.at(0), 0x01010000), math_shl_u64(KEY_LENGTH.into(), 8_u64)), Into::<u8,u64>::into(OUT_LENGTH)));
+    h.append(
+        u64_xor(
+            u64_xor(
+                u64_xor(*iv.at(0), 0x01010000), (KEY_LENGTH.into() * 256_u64)
+            ),
+            Into::<u8,u64>::into(OUT_LENGTH)
+        )
+    );
 
     let mut i: u8 = 1;
     loop{
@@ -418,17 +330,11 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
     let last_block_offset = b_len_before_padding % 128;
 
     // Is this even actual since usize will be limiting here not u128_max
-    // if b_len_before_padding.into() < BoundedInt::<u128>::max(){
-    //     return Result::Err('Input too long');
-    // }
-
+    assert(b_len_before_padding.into() < BoundedInt::<u128>::max(), 'Input too long');
+    
     add_padding(ref b);
 
     let b_u64_le = get_b_u64_le(b.span());
-
-    // if true{
-    // panic(convert_u64_array_to_felt252_array(b_u64_le.span()));
-    // }
 
     let b_u64_le_len = b_u64_le.len();
     let num_of_blocks = b_u64_le_len/16;
@@ -456,9 +362,6 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
             h_new = F(h_old, b_u64_le.span(), t0, t1, true, i);
         };
 
-    //     if true{
-    // panic(convert_u64_array_to_felt252_array(b_u64_le.span()));
-    // }
         h_old = h_new.span();
         i = i + 1;
     };
@@ -524,11 +427,11 @@ fn get_sigma() -> Array<u8> {
     s.append(0x0A);s.append(0x02);s.append(0x08);s.append(0x04);s.append(0x07);s.append(0x06);s.append(0x01);s.append(0x05);
     s.append(0x0F);s.append(0x0B);s.append(0x09);s.append(0x0E);s.append(0x03);s.append(0x0C);s.append(0x0D);s.append(0x00);
 
-    s.append(0x00);s.append(0x01);s.append(0x02);s.append(0x03);s.append(0x04);s.append(0x05);s.append(0x06);s.append(0x07);
-    s.append(0x08);s.append(0x09);s.append(0x0A);s.append(0x0B);s.append(0x0C);s.append(0x0D);s.append(0x0E);s.append(0x0F);
+    // s.append(0x00);s.append(0x01);s.append(0x02);s.append(0x03);s.append(0x04);s.append(0x05);s.append(0x06);s.append(0x07);
+    // s.append(0x08);s.append(0x09);s.append(0x0A);s.append(0x0B);s.append(0x0C);s.append(0x0D);s.append(0x0E);s.append(0x0F);
 
-    s.append(0x0E);s.append(0x0A);s.append(0x04);s.append(0x08);s.append(0x09);s.append(0x0F);s.append(0x0D);s.append(0x06);
-    s.append(0x01);s.append(0x0C);s.append(0x00);s.append(0x02);s.append(0x0B);s.append(0x07);s.append(0x05);s.append(0x03);
+    // s.append(0x0E);s.append(0x0A);s.append(0x04);s.append(0x08);s.append(0x09);s.append(0x0F);s.append(0x0D);s.append(0x06);
+    // s.append(0x01);s.append(0x0C);s.append(0x00);s.append(0x02);s.append(0x0B);s.append(0x07);s.append(0x05);s.append(0x03);
 
     s
 }
@@ -553,4 +456,26 @@ fn convert_u64_array_to_felt252_array(a: Span<u64>) -> Array<felt252>{
         i=i+1;
     };
     x
+}
+
+fn u8_array_eq(x: Span<u8>, y: Span<u8>) -> bool {
+	if x.len() != y.len(){
+		return false;
+	}
+
+	let mut itr = 0;
+	let mut eq = true;
+	loop{
+		if itr == x.len(){
+			break;
+		};
+		
+		if *x.at(itr)!=*y.at(itr){
+			eq = false;
+			break;
+		};
+		
+		itr = itr +1;
+	};
+	eq
 }

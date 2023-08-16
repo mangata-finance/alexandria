@@ -10,11 +10,7 @@ use result::ResultTrait;
 fn test_storage_proof_verification() {
     let (buffer, buffer_index) = get_storage_proof_data();
     let ers = get_expected_raw_storage();
-    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
     let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
-    // assert(msg.len() == 6400, 'Incorrect hash length');
-    // assert(true==false, 'fail');
-    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
     let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
@@ -25,11 +21,7 @@ fn test_storage_proof_verification() {
 fn test_storage_proof_verification_given_hashes() {
     let (buffer, buffer_index) = get_storage_proof_data();
     let ers = get_expected_raw_storage();
-    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
     let res = verify_substrate_storage_proof_given_hashes(buffer.span(), buffer_index.span(), get_key().span(), get_root().span(), get_hashes().span()).unwrap();
-    // assert(msg.len() == 6400, 'Incorrect hash length');
-    // assert(true==false, 'fail');
-    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
     let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
@@ -40,13 +32,7 @@ fn test_storage_proof_verification_given_hashes() {
 fn test_storage_proof_verification_2() {
     let (buffer, buffer_index) = get_storage_proof_data_2();
     let ers = get_expected_raw_storage_2();
-    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
     let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key_2().span(), get_root_2().span()).unwrap();
-    // assert(msg.len() == 6400, 'Incorrect hash length');
-    // assert(true==false, 'fail');
-    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
-    // res.range.start.print();
-    // res.range.end.print();
     let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
@@ -57,13 +43,7 @@ fn test_storage_proof_verification_2() {
 fn test_storage_proof_verification_given_hashes_2() {
     let (buffer, buffer_index) = get_storage_proof_data_2();
     let ers = get_expected_raw_storage_2();
-    // let res = verify_substrate_storage_proof(buffer.span(), buffer_index.span(), get_key().span(), get_root().span()).unwrap();
     let res = verify_substrate_storage_proof_given_hashes(buffer.span(), buffer_index.span(), get_key_2().span(), get_root_2().span(), get_hashes_2().span()).unwrap();
-    // assert(msg.len() == 6400, 'Incorrect hash length');
-    // assert(true==false, 'fail');
-    // panic(convert_u8_subarray_to_felt252_array(res.span, res.range.start, res.range.end - res.range.start));
-    // res.range.start.print();
-    // res.range.end.print();
     let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
@@ -287,7 +267,3 @@ fn get_hashes_2() -> Array<u8> {
     i.append(0x8f);i.append(0x43);i.append(0x8c);i.append(0xdf);i.append(0x6d);i.append(0xcd);i.append(0x7d);i.append(0xa2);i.append(0xb6);i.append(0xbb);i.append(0xa5);i.append(0x01);i.append(0xf2);i.append(0x2c);i.append(0x25);i.append(0xac);i.append(0x3a);i.append(0x4a);i.append(0xfb);i.append(0x00);i.append(0x4f);i.append(0xdc);i.append(0xaf);i.append(0x9d);i.append(0x29);i.append(0x3e);i.append(0x90);i.append(0x0c);i.append(0xd0);i.append(0x0a);i.append(0x6c);i.append(0xb6);
     i
 }
-
-// [133,4,179,187,69,3,191,6,228,196,117,43,20,69,29,151,97,34,32,105,25,73,133,113,66,112,31,147,124,133,89,200,35,35,194,96,175,0,213,95,247,51,101,194,142,226,223,52,13'),132,12,236,68,4,6,5,118,138,112,236,61,170,169,219,37,240,111,76,99,240,157,189,222,69,61,119,9,211,179,215,215,64,218,81,172,95,3,170,223,82,235,37,173,249,109,225,193,97,228,30,254,40,12,6,97,117,114,97,32,158,231,101,8('),0,0,0,0,0,4,0,5,97,117,114,97,1,1,196,188,52,135,188,93,60,154,1,194,171,154,54,105,147,98,22,139,34,202,54,79,38,21,226,55,130,199,107,97,92,90,138,144,235,4,140,68,64,186,166,125,3,88,33,22,78,168,77,135,148,128,211,161,127,157,238,4,230,194,175,216,19,133,140,152,147,22,36,11,181,29,150,84,188,195,154,246,45,193,226,52,121,9,134,219,99,194,155,134,87,72,131,186,24,37,72,99,216,113,183,219,113,81,133,143,73,130,183,42,118,'),27('5,163,94,8('),216,12,202,88,104,248,9,185,87,89,37,246,69,26,123,117,39,53,171,27('15,52,234,70,18,133,12,0,0,0,0,]
-
-// 133,4,179,187,69,3,191,6,228,196,117,43,20,69,29,151,97,34,32,105,25,73,133,113,66,112,31,147,124,133,89,200,35,35,194,96,175,0,213,95,247,51,101,194,142,226,223,52,13,132,12,236,68,4,6,5,118,138,112,236,61,170,169,219,37,240,111,76,99,240,157,189,222,69,61,119,9,211,179,215,215,64,218,81,172,95,3,170,223,82,235,37,173,249,109,225,193,97,228,30,254,40,12,6,97,117,114,97,32,158,231,101,8,0,0,0,0,0,4,0,5,97,117,114,97,1,1,196,188,52,135,188,93,60,154,1,194,171,154,54,105,147,98,22,139,34,202,54,79,38,21,226,55,130,199,107,97,92,90,138,144,235,4,140,68,64,186,166,125,3,88,33,22,78,168,77,135,148,128,211,161,127,157,238,4,230,194,175,216,19,133,140,152,147,22,36,11,181,29,150,84,188,195,154,246,45,193,226,52,121,9,134,219,99,194,155,134,87,72,131,186,24,37,72,99,216,113,183,219,113,81,133,143,73,130,183,42,118,37,127,166,13,152,167,85,241,214,13,238,175,74,253,92,215,13,27,45,163,94,8,216,12,202,88,104,248,9,185,87,89,37,246,69,26,123,117,39,53,171,27,115,52,234,70,18,133,12,0,0,0,0
