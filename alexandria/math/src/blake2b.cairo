@@ -127,9 +127,8 @@ fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
 }
 
 // each u64 of b has to be little endian here
-fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<u64> {
+fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128, sigma_span: Span<u8>, iv: Span<u8>) -> Array<u64> {
 
-    let iv = get_iv();
     let mut v = ArrayTrait::<u64>::new();
     let mut i: u8 = 0;
     loop {
@@ -171,15 +170,15 @@ fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128) -> Array<
         let s_select: usize = (i%10).into();
         let s_pointer: usize = SIGMA_WIDTH * s_select;
 
-        let v0 = G(v.span() , 0,4,8,12,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 1)).into()).try_into().unwrap()));
-        let v1 = G(v0.span(), 1,5,9,13,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 3)).into()).try_into().unwrap()));
-        let v2 = G(v1.span(), 2,6,10,14, *b.at((itr*16 + (*get_sigma().at(s_pointer + 4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 5)).into()).try_into().unwrap()));
-        let v3 = G(v2.span(), 3,7,11,15, *b.at((itr*16 + (*get_sigma().at(s_pointer + 6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 7)).into()).try_into().unwrap()));
+        let v0 = G(v.span() , 0,4,8,12,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 1)).into()).try_into().unwrap()));
+        let v1 = G(v0.span(), 1,5,9,13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 3)).into()).try_into().unwrap()));
+        let v2 = G(v1.span(), 2,6,10,14, *b.at((itr*16 + (*sigma_span.at(s_pointer + 4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 5)).into()).try_into().unwrap()));
+        let v3 = G(v2.span(), 3,7,11,15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 7)).into()).try_into().unwrap()));
 
-        let v4 = G(v3.span(), 0,5,10,15, *b.at((itr*16 + (*get_sigma().at(s_pointer + 8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*get_sigma().at(s_pointer + 9)).into()).try_into().unwrap()));
-        let v5 = G(v4.span(), 1,6,11,12, *b.at((itr*16 + (*get_sigma().at(s_pointer + 10)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 11)).into()).try_into().unwrap()));
-        let v6 = G(v5.span(), 2,7,8,13,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 12)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 13)).into()).try_into().unwrap()));
-        let v7 = G(v6.span(), 3,4,9,14,  *b.at((itr*16 + (*get_sigma().at(s_pointer + 14)).into()).try_into().unwrap()), *b.at((itr*16 + (*get_sigma().at(s_pointer + 15)).into()).try_into().unwrap()));
+        let v4 = G(v3.span(), 0,5,10,15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 9)).into()).try_into().unwrap()));
+        let v5 = G(v4.span(), 1,6,11,12, *b.at((itr*16 + (*sigma_span.at(s_pointer + 10)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 11)).into()).try_into().unwrap()));
+        let v6 = G(v5.span(), 2,7,8,13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 12)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 13)).into()).try_into().unwrap()));
+        let v7 = G(v6.span(), 3,4,9,14,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 14)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 15)).into()).try_into().unwrap()));
 
         v=v7.clone();
         i=i+1;
@@ -301,7 +300,7 @@ fn get_out_u8_be(data: Span<u64>) -> Array<u8> {
 
 fn blake2b(mut b: Array<u8>) -> Array<u8> {
 
-    let iv = get_iv();
+    let iv = get_iv().span();
 
     let mut h = ArrayTrait::<u64>::new();
     h.append(
@@ -339,6 +338,7 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
     let b_u64_le_len = b_u64_le.len();
     let num_of_blocks = b_u64_le_len/16;
 
+    let sigma_span = get_sigma().span();
     let mut h_old = h.span();
     let mut i: u128 = 0;
     let mut h_new = ArrayTrait::<u64>::new();
@@ -353,13 +353,13 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
                 t1 = u64_wrapping_add(t1, 1);
             }
 
-            h_new = F(h_old, b_u64_le.span(), t0, t1, false, i);
+            h_new = F(h_old, b_u64_le.span(), t0, t1, false, i, sigma_span, iv);
         } else {
             t0 = u64_wrapping_add(t0, last_block_offset.into());
             if t0 < last_block_offset.into(){
                 t1 = u64_wrapping_add(t1, 1);
             }
-            h_new = F(h_old, b_u64_le.span(), t0, t1, true, i);
+            h_new = F(h_old, b_u64_le.span(), t0, t1, true, i, sigma_span, iv);
         };
 
         h_old = h_new.span();
@@ -426,12 +426,6 @@ fn get_sigma() -> Array<u8> {
     // { 10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0 }
     s.append(0x0A);s.append(0x02);s.append(0x08);s.append(0x04);s.append(0x07);s.append(0x06);s.append(0x01);s.append(0x05);
     s.append(0x0F);s.append(0x0B);s.append(0x09);s.append(0x0E);s.append(0x03);s.append(0x0C);s.append(0x0D);s.append(0x00);
-
-    // s.append(0x00);s.append(0x01);s.append(0x02);s.append(0x03);s.append(0x04);s.append(0x05);s.append(0x06);s.append(0x07);
-    // s.append(0x08);s.append(0x09);s.append(0x0A);s.append(0x0B);s.append(0x0C);s.append(0x0D);s.append(0x0E);s.append(0x0F);
-
-    // s.append(0x0E);s.append(0x0A);s.append(0x04);s.append(0x08);s.append(0x09);s.append(0x0F);s.append(0x0D);s.append(0x06);
-    // s.append(0x01);s.append(0x0C);s.append(0x00);s.append(0x02);s.append(0x0B);s.append(0x07);s.append(0x05);s.append(0x03);
 
     s
 }
