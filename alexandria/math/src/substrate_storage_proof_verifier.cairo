@@ -9,7 +9,6 @@ use array::{ArrayTrait, SpanTrait};
 use core::clone::Clone;
 use alexandria_math::blake2b::{blake2b, convert_u8_array_to_felt252_array};
 use core::traits::Default;
-// use debug::PrintTrait;
 
 
 const FIRST_PREFIX: u8 = 0x00;
@@ -30,18 +29,9 @@ const NIBBLE_LENGTH: usize = 16;
 
 const HASH_LENGTH: usize = 32; // 256/8
 
-// TODO
-// Write traversal loop
-// write scale decoders for u16 and compact u32
-// Write buffer management stuff
-// Write hasher stuff
-// Maybe setup substrate code for debugging
-// Debug 
 
+// Possibly unsafe and insecure substrate storage proof verifier 
 
-// Use number_padding
-// Use slices everywhere, use actuals and not plans
-// Impl ops on slices...
 
 #[derive(Copy, Drop)]
 enum NodeHeader {
@@ -253,20 +243,14 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 	let mut key_nibble_offset: usize = 0;
 	let mut hash = Slice{span: root, range: Range{start: 0, end: root.len()}};
 
-	// if true{
-	// 	let x:usize=4;
-	// panic(convert_u8_subarray_to_felt252_array(hashes, x*HASH_LENGTH, HASH_LENGTH ));
-	// }
+	
 	let mut depth:usize =0;
 	let mut inner_depth:usize =0;
 	let res2 = loop{
 
-	// assert(false, 'assert false 4');
 		let mut node_data = get_node(hash, hashes, buffer, buffer_index).unwrap();
-		// assert(false, 'assert false 5');
 		let (is_continue, res0) = loop{
 			let decoded_node = parse_encoded_node(node_data).unwrap();
-			// let decoded_node = NodePlan::Empty(());
 			let mut next_node: Option<NodeHandlePlan> = Option::None(());
 			match decoded_node{
 				NodePlan::Empty(()) => {
@@ -288,7 +272,6 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 						};
 
 						if nibble_partial_len_eq(buffer, nibble_slice_plan, key, key_nibble_offset) {
-			// assert(false, 'assert false 7');
 							if maybe_value_plan.is_some(){
 								let val = load_value(
 																buffer,
@@ -300,7 +283,6 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 												} else{break (false, Result::Err('No value at NibbledBranch'));}
 							
 						} else {
-			// assert(false, 'assert false 8');
 
 							if children.at(nibble_at(key, key_nibble_offset+ nibble_len(nibble_slice_plan), false).into()).is_some(){
 									next_node = *children.at(nibble_at(key, key_nibble_offset+ nibble_len(nibble_slice_plan), false).into());
@@ -312,10 +294,6 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 					},
 			};
 
-			// assert(false, 'assert false 2');
-			// panic_with_felt252(depth);
-			// depth.print();
-			// inner_depth.print();
 			assert(next_node.is_some(), 'next_node is none');
 			
 			inner_depth = inner_depth + 1;
@@ -332,9 +310,6 @@ fn lookup_value(buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hash
 		};
 		depth = depth +1;
 		if !is_continue{
-			// res0.is_ok().print();
-			// if res0.is_err(){
-			// res0.unwrap_err().print();}
 			break res0;
 		};
 	};
@@ -349,7 +324,7 @@ fn nibble_at(nibble_byte_span: Span<u8>, nibble_index: usize, padding: bool) -> 
 	};
 
 	if (nibble_index % NIBBLE_PER_BYTE == 0) ^ padding {
-		u8_shr(byte, 4)
+		byte/16
 	} else {
 		u8_bitand(byte, NIBBLE_BITMASK_RIGHT)
 	}
@@ -363,7 +338,7 @@ fn nibble_at_slice(nibble_byte_slice: Slice<u8>, nibble_index: usize, padding: b
 	};
 
 	if (nibble_index % NIBBLE_PER_BYTE == 0) ^ padding {
-		u8_shr(byte, 4)
+		byte/16
 	} else {
 		u8_bitand(byte, NIBBLE_BITMASK_RIGHT)
 	}
@@ -371,17 +346,12 @@ fn nibble_at_slice(nibble_byte_slice: Slice<u8>, nibble_index: usize, padding: b
 
 fn nibble_partial_eq(buffer: Span<u8>, nibble_slice_plan: NibbleSlicePlan, key: Span<u8>, key_nibble_offset: usize) -> bool {
 
-	// This seems to an error why was this here?
-	// if (nibble_slice_plan.range.end == nibble_slice_plan.range.start){
-	// 	return true;
-	// }
-
 	if !nibble_partial_len_eq(buffer, nibble_slice_plan, key, key_nibble_offset){
 		return false;
 	}
 
 	let nibble_length:usize = if nibble_slice_plan.padding {
-		(nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE - 1
+		((nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE) - 1
 	} else {
 		(nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE
 	};
@@ -419,7 +389,7 @@ fn nibble_partial_starts_with(buffer: Span<u8>, nibble_slice_plan: NibbleSlicePl
 	}
 
 	let nibble_length = if nibble_slice_plan.padding {
-		(nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE - 1
+		((nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE) - 1
 	} else {
 		(nibble_slice_plan.range.end - nibble_slice_plan.range.start) * NIBBLE_PER_BYTE
 	};
@@ -481,11 +451,9 @@ fn load_value(
 ) -> Slice<u8> {
 	match v {
 		ValuePlan::Inline(value_plan) => Slice{span: buffer, range: value_plan},
-		// TODO
-		// Use slice for hash
 		
 		ValuePlan::Node(hash_range) => {
-	assert(false, 'assert false 3');get_node(Slice{span: buffer, range: hash_range}, hashes, buffer, buffer_index).unwrap()},
+	get_node(Slice{span: buffer, range: hash_range}, hashes, buffer, buffer_index).unwrap()},
 	}
 }
 
@@ -533,17 +501,7 @@ fn get_node(hash: Slice<u8>, hashes: Span<u8>, buffer: Span<u8>, buffer_index: S
 
 		itr= itr+1;
 	};
-	// if true{
-	// 	// let x:usize=4;
-	// 	// eq.print();
-	// 	if eq {
-	// panic_with_felt252(1);
-	// 	} else {
-
-	// panic_with_felt252(0);
-	// 	}
-	// // panic(convert_u8_array_to_felt252_array(res.unwrap().span ));
-	// }
+	
 	res
 }
 
@@ -551,15 +509,14 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 
     // let encoded_node: Slice<u8> = buffer;
     let mut offset: usize = buffer.range.start;
-	// TODO
-	// At the end of parsing the node maybe we could check if it is at the end of the slice
+	
     let header = decode_header(buffer, ref offset).unwrap();
+
+	assert(offset<buffer.range.end, 'offset beyond node range');
 
     let contains_hash = match header {
 	NodeHeader::Null(_) => {false},
-	// contains wether there is a value and nibble count
 	NodeHeader::Branch(_) => {false},
-	// contains nibble count
 	NodeHeader::Leaf(_) => {false},
         NodeHeader::HashedValueBranch(_)=> {true},
 		NodeHeader::HashedValueLeaf(_) => {true},
@@ -576,7 +533,6 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
     match header {
 			NodeHeader::Null(()) => Result::Ok(NodePlan::Empty(())),
             NodeHeader::Branch((_, nibble_count)) => {
-				// nibble_count.print();
 				let padding = ((nibble_count % NIBBLE_PER_BYTE) != 0);
 				// check that the padding is valid (if any)
 				if padding && (u8_bitand(*buffer.span.at(offset), NIBBLE_BITMASK_LEFT) != 0) {
@@ -586,13 +542,8 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 				let partial = Range {start: offset, end: offset + partial_bytes_length};
                 offset = offset + partial_bytes_length;
 				let partial_padding = (nibble_count%NIBBLE_PER_BYTE) !=0;
-				// partial.start.print();
-				// partial.end.print();
-				// partial_padding.print();
-				let bitmap_range = Range {start: offset, end: offset + BITMAP_LENGTH};
+				let bitmap = bitmap_decode(Slice {span: buffer.span, range: Range {start: offset, end: offset + BITMAP_LENGTH}});
                 offset = offset + BITMAP_LENGTH;
-				let bitmap = bitmap_decode(buffer, bitmap_range);
-				// bitmap.print();
 				let value = if branch_has_value {
 					Option::Some(if contains_hash {
 						let vp = ValuePlan::Node(Range {start: offset, end: offset + HASH_LENGTH});
@@ -614,7 +565,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     if itr == NIBBLE_LENGTH{
                         break;
                     }
-					if bitmap_value_at(bitmap, itr) {
+					if bitmap_value_at(bitmap, itr.try_into().expect('itr < 16')) {
 						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let range = Range {start: offset, end: offset + count};
                         offset = offset + count;
@@ -629,16 +580,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     itr = itr + 1;
 				};
 
-				let children_span = children.span();
-				// DEBUGGING
-				// let mut itr: usize = 0;
-				// loop {
-                //     if itr == NIBBLE_LENGTH{
-                //         break;
-                //     }
-				// 	children_span.at(itr).is_some().print();
-                //     itr = itr + 1;
-				// };
+				assert(offset == buffer.range.end, 'offset not at node range end');
 				
 				Result::Ok(NodePlan::NibbledBranch((
 					NibbleSlicePlan{range: partial, padding: partial_padding},
@@ -666,6 +608,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     offset = offset + count;
                     vp
                 };
+				assert(offset == buffer.range.end, 'offset not at node range end');
 
 				Result::Ok(NodePlan::Leaf((
 					NibbleSlicePlan{range: partial, padding: partial_padding},
@@ -682,9 +625,8 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 				let partial = Range {start: offset, end: offset + partial_bytes_length};
                 offset = offset + partial_bytes_length;
 				let partial_padding = (nibble_count%NIBBLE_PER_BYTE) !=0;
-				let bitmap_range = Range {start: offset, end: offset + BITMAP_LENGTH};
+				let bitmap = bitmap_decode(Slice{span: buffer.span, range:Range {start: offset, end: offset + BITMAP_LENGTH}});
                 offset = offset + BITMAP_LENGTH;
-				let bitmap = bitmap_decode(buffer, bitmap_range);
 				let value = if branch_has_value {
 					Option::Some(if contains_hash {
 						let vp = ValuePlan::Node(Range {start: offset, end: offset + HASH_LENGTH});
@@ -706,7 +648,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     if itr == NIBBLE_LENGTH{
                         break;
                     }
-					if bitmap_value_at(bitmap, itr) {
+					if bitmap_value_at(bitmap, itr.try_into().expect('itr < 16')) {
 						let count = compact_u32_decode(buffer, ref offset).unwrap();
 						let range = Range {start: offset, end: offset + count};
                         offset = offset + count;
@@ -720,6 +662,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     }
                     itr = itr + 1;
 				};
+				assert(offset == buffer.range.end, 'offset not at node range end');
 				Result::Ok(NodePlan::NibbledBranch((
 					NibbleSlicePlan{range: partial, padding: partial_padding},
 					value,
@@ -746,6 +689,7 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
                     offset = offset + count;
                     vp
                 };
+				assert(offset == buffer.range.end, 'offset not at node range end');
 
 				Result::Ok(NodePlan::Leaf((
 					NibbleSlicePlan{range: partial, padding: partial_padding},
@@ -756,9 +700,9 @@ fn parse_encoded_node(buffer: Slice<u8>) -> Result<NodePlan, felt252>{
 
 }
 
-fn bitmap_decode(buffer: Slice<u8>, range: Range) -> u16 {
-	assert((range.end - range.start) == 2, 'wrong bitmap len' );
-	let value = u16_decode(Slice{span: buffer.span, range: range});
+fn bitmap_decode(buffer: Slice<u8>) -> u16 {
+	assert((buffer.range.end - buffer.range.start) == 2, 'wrong bitmap len' );
+	let value = u16_decode(buffer);
 	assert(value!=0, 'Bitmap without a child');
 	value
 }
@@ -786,12 +730,12 @@ fn u32_decode(slice: Slice<u8>) -> u32 {
 	let third: u32 = Into::<u8, u32>::into(*slice.span.at(slice.range.start + 2));
 	let fourth: u32 = Into::<u8, u32>::into(*slice.span.at(slice.range.start + 3));
 
-	let res:u32 = first + (second * 256) + (third * 256 * 256) + (fourth * 256 * 256 * 256);
+	let res:u32 = first + ((second + ((third + (fourth * 256)) *256)) * 256);
 	res
 
 }
 
-fn bitmap_value_at(bitmap: u16, itr: usize) -> bool {
+fn bitmap_value_at(bitmap: u16, itr: u8) -> bool {
 	u16_bitand(bitmap, TryInto::<u128,u16>::try_into(shl(1, itr.into()) % BoundedInt::<u16>::max().into()).unwrap()) != 0
 }
 
@@ -830,7 +774,7 @@ fn compact_u32_decode(buffer: Slice<u8>, ref offset: usize) -> Result<u32,felt25
 		let fourth: u32 = Into::<u8, u32>::into(*buffer.span.at(offset));
 		offset = offset + 1;
 
-		let x:u32 = (first + (second * 256) + (third * 256 * 256) + (fourth * 256 * 256 * 256))/4;
+		let x:u32 = (first + ((second + ((third + (fourth * 256)) *256)) * 256))/4;
 
 		if x > 0x3FFF && x <= (BoundedInt::<u32>::max()/4) {
 			return Result::Ok(x);
@@ -849,7 +793,7 @@ fn compact_u32_decode(buffer: Slice<u8>, ref offset: usize) -> Result<u32,felt25
 			let fourth: u32 = Into::<u8, u32>::into(*buffer.span.at(offset));
 			offset = offset + 1;
 
-			let x:u32 = first + (second * 256) + (third * 256 * 256) + (fourth * 256 * 256 * 256);
+			let x:u32 = first + ((second + ((third + (fourth * 256)) *256)) * 256);
 
 			if x > (BoundedInt::<u32>::max()/4) {
 				return Result::Ok(x);
@@ -866,8 +810,7 @@ fn compact_u32_decode(buffer: Slice<u8>, ref offset: usize) -> Result<u32,felt25
 
 fn decode_header(b: Slice<u8>, ref offset: usize) -> Result<NodeHeader, felt252> {
     let i = *b.span.at(offset);
-	// TODO
-    // safe inc? check against b.len()?
+
     offset = offset + 1;
 
     if i==EMPTY_TRIE{

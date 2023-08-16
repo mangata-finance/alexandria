@@ -30,6 +30,12 @@ const OUT_LENGTH: u8 = 32;
 // TODO
 // Increment loops!!
 
+
+// Optimization
+// Do not clone uselessly
+// Maybe the padding function can be a loop? Idt this is imp...
+// Use pop_front to replicate array or transform?
+
 // Maybe use span for both input and output on v
 // But maybe not for output as we want the array to be moved out of this function
 // as the function closes and the array goes out of scope
