@@ -9,7 +9,7 @@ use core::clone::Clone;
 
 const U64_BIT_NUM: u64 = 64;
 
-const NUM_OF_ROUNDS: u64 = 12;
+const NUM_OF_ROUNDS: usize = 12;
 
 const SIGMA_WIDTH: usize = 16;
 
@@ -74,8 +74,7 @@ fn u64_and(x: u64, y: u64) -> u64 {
 }
 
 // x and y have to be little endian here
-fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
-    let mut v_a = *v.at(a.into()); let mut v_b = *v.at(b.into()); let mut v_c = *v.at(c.into()); let mut v_d = *v.at(d.into());
+fn G(ref v_a: u64,ref v_b: u64,ref v_c: u64,ref v_d: u64, x: u64, y: u64) {
 
     v_a = u64_wrapping_add(v_a, u64_wrapping_add(v_b, x));
 
@@ -101,104 +100,64 @@ fn G(v: Span<u64>, a: u8, b: u8, c: u8, d: u8, x: u64, y: u64) -> Array<u64> {
     // 2^63 = 9223372036854775808, 2^1 = 2
     v_b = u64_or(v_b_xor_v_c/9223372036854775808, TryInto::<u128,u64>::try_into((Into::<u64,u128>::into(v_b_xor_v_c) * 2) % BoundedInt::<u64>::max().into()).unwrap());
 
-    let mut v_new = ArrayTrait::<u64>::new();
-    let mut i: u8 = 0;
-    loop {
-        if i == 16{
-            break;
-        }
-
-        if i==a{
-            v_new.append(v_a);
-        } else if i==b{
-            v_new.append(v_b);
-        } else if i==c{
-            v_new.append(v_c);
-        } else if i==d{
-            v_new.append(v_d);
-        } else {
-            v_new.append(*v.at(i.into()));
-        }
-        i=i+1;
-    };
-
-    assert(v_new.len()==16, 'assert v_new len == 16');
-    v_new
 }
 
 // each u64 of b has to be little endian here
-fn F(h: Span<u64>, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128, sigma_span: Span<u8>, iv: Span<u8>) -> Array<u64> {
+fn F(ref h_0: u64, ref h_1: u64, ref h_2: u64, ref h_3: u64, ref h_4: u64, ref h_5: u64, ref h_6: u64, ref h_7: u64, b: Span<u64>, t0: u64, t1: u64, f: bool, itr: u128, sigma_span: Span<u8>, iv: Span<u64>){
 
-    let mut v = ArrayTrait::<u64>::new();
-    let mut i: u8 = 0;
-    loop {
-        if i == 8{
-            break;
-        }
-
-        v.append(*h.at(i.into()));
-
-        i=i+1;
-    };
-
-    i = 0;
-    loop {
-        if i == 8{
-            break;
-        }
-
-        if i == 4 {
-            v.append(u64_xor(*iv.at(4), t0));
-        } else if i == 5 {
-            v.append(u64_xor(*iv.at(5), t1));
-        } else if i == 6 {
-            if f {
-                        v.append(u64_xor(*iv.at(6), BoundedInt::<u64>::max()));
+    let mut v_0:u64 = h_0;
+    let mut v_1:u64 = h_1;
+    let mut v_2:u64 = h_2;
+    let mut v_3:u64 = h_3;
+    let mut v_4:u64 = h_4;
+    let mut v_5:u64 = h_5;
+    let mut v_6:u64 = h_6;
+    let mut v_7:u64 = h_7;
+    let mut v_8:u64 = *iv.at(0);
+    let mut v_9:u64 = *iv.at(1);
+    let mut v_10:u64 = *iv.at(2);
+    let mut v_11:u64 = *iv.at(3);
+    let mut v_12:u64 = u64_xor(*iv.at(4), t0);
+    let mut v_13:u64 = u64_xor(*iv.at(5), t1);
+    let mut v_14:u64 = if f {
+                        u64_xor(*iv.at(6), BoundedInt::<u64>::max())
                     } else {
-                        v.append(*iv.at(6));
+                        *iv.at(6)
                     };
-        } else {
-            v.append(*iv.at(i.into()))
-        }
+    let mut v_15:u64 = *iv.at(7);
 
-        i=i+1;
-    };
+    let mut i: usize = 0;
 
-    i=0;
-    let v7 = loop{
+    loop{
+        if i == NUM_OF_ROUNDS{
+            break ;
+        };
         
-        let s_select: usize = (i%10).into();
+        let s_select: usize = i%10;
         let s_pointer: usize = SIGMA_WIDTH * s_select;
 
-        let v0 = G(v.span() , 0,4,8,12,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 1)).into()).try_into().unwrap()));
-        let v1 = G(v0.span(), 1,5,9,13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 3)).into()).try_into().unwrap()));
-        let v2 = G(v1.span(), 2,6,10,14, *b.at((itr*16 + (*sigma_span.at(s_pointer + 4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 5)).into()).try_into().unwrap()));
-        let v3 = G(v2.span(), 3,7,11,15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 7)).into()).try_into().unwrap()));
+        G(ref v_0,ref v_4,ref v_8,ref v_12,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 0)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 1)).into()).try_into().unwrap()));
+        G(ref v_1,ref v_5,ref v_9,ref v_13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 2)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 3)).into()).try_into().unwrap()));
+        G(ref v_2,ref v_6,ref v_10,ref v_14, *b.at((itr*16 + (*sigma_span.at(s_pointer + 4)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 5)).into()).try_into().unwrap()));
+        G(ref v_3,ref v_7,ref v_11,ref v_15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 6)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 7)).into()).try_into().unwrap()));
 
-        let v4 = G(v3.span(), 0,5,10,15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 9)).into()).try_into().unwrap()));
-        let v5 = G(v4.span(), 1,6,11,12, *b.at((itr*16 + (*sigma_span.at(s_pointer + 10)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 11)).into()).try_into().unwrap()));
-        let v6 = G(v5.span(), 2,7,8,13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 12)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 13)).into()).try_into().unwrap()));
-        let v7 = G(v6.span(), 3,4,9,14,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 14)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 15)).into()).try_into().unwrap()));
+        G(ref v_0,ref v_5,ref v_10,ref v_15, *b.at((itr*16 + (*sigma_span.at(s_pointer + 8)).into()).try_into().unwrap()) , *b.at((itr*16 + (*sigma_span.at(s_pointer + 9)).into()).try_into().unwrap()));
+        G(ref v_1,ref v_6,ref v_11,ref v_12, *b.at((itr*16 + (*sigma_span.at(s_pointer + 10)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 11)).into()).try_into().unwrap()));
+        G(ref v_2,ref v_7,ref v_8,ref v_13,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 12)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 13)).into()).try_into().unwrap()));
+        G(ref v_3,ref v_4,ref v_9,ref v_14,  *b.at((itr*16 + (*sigma_span.at(s_pointer + 14)).into()).try_into().unwrap()), *b.at((itr*16 + (*sigma_span.at(s_pointer + 15)).into()).try_into().unwrap()));
 
-        v=v7.clone();
-        i=i+1;
-        if i.into() == NUM_OF_ROUNDS{
-            break v7;
-        };
-    };
-
-
-    let mut h_new = ArrayTrait::<u64>::new();
-    i=0;
-    loop{
-        if i==8{
-            break;
-        }
-        h_new.append(u64_xor(u64_xor(*h.at(i.into()), *v7.at(i.into())), *v7.at(8+i.into())));
         i=i+1;
     };
 
-    h_new
+    h_0 = (u64_xor(u64_xor(h_0, v_0), v_8));
+    h_1 = (u64_xor(u64_xor(h_1, v_1), v_9));
+    h_2 = (u64_xor(u64_xor(h_2, v_2), v_10));
+    h_3 = (u64_xor(u64_xor(h_3, v_3), v_11));
+    h_4 = (u64_xor(u64_xor(h_4, v_4), v_12));
+    h_5 = (u64_xor(u64_xor(h_5, v_5), v_13));
+    h_6 = (u64_xor(u64_xor(h_6, v_6), v_14));
+    h_7 = (u64_xor(u64_xor(h_7, v_7), v_15));
+
 }
 
 fn add_padding(ref b: Array<u8>) {
@@ -302,24 +261,19 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
 
     let iv = get_iv().span();
 
-    let mut h = ArrayTrait::<u64>::new();
-    h.append(
-        u64_xor(
+    let mut h_0: u64 = u64_xor(
             u64_xor(
                 u64_xor(*iv.at(0), 0x01010000), (KEY_LENGTH.into() * 256_u64)
             ),
             Into::<u8,u64>::into(OUT_LENGTH)
-        )
-    );
-
-    let mut i: u8 = 1;
-    loop{
-        if i == 8{
-            break;
-        }
-        h.append(*iv.at(i.into()));
-        i=i+1;
-    };
+        );
+    let mut h_1: u64 = *iv.at(1);
+    let mut h_2: u64 = *iv.at(2);
+    let mut h_3: u64 = *iv.at(3);
+    let mut h_4: u64 = *iv.at(4);
+    let mut h_5: u64 = *iv.at(5);
+    let mut h_6: u64 = *iv.at(6);
+    let mut h_7: u64 = *iv.at(7);
 
     let mut t0:u64 =0;
     let mut t1:u64 =0;
@@ -339,9 +293,7 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
     let num_of_blocks = b_u64_le_len/16;
 
     let sigma_span = get_sigma().span();
-    let mut h_old = h.span();
     let mut i: u128 = 0;
-    let mut h_new = ArrayTrait::<u64>::new();
     loop{
         if i == num_of_blocks.into(){
             break;
@@ -353,18 +305,27 @@ fn blake2b(mut b: Array<u8>) -> Array<u8> {
                 t1 = u64_wrapping_add(t1, 1);
             }
 
-            h_new = F(h_old, b_u64_le.span(), t0, t1, false, i, sigma_span, iv);
+            F(ref h_0, ref h_1, ref h_2, ref h_3, ref h_4, ref h_5, ref h_6, ref h_7, b_u64_le.span(), t0, t1, false, i, sigma_span, iv);
         } else {
             t0 = u64_wrapping_add(t0, last_block_offset.into());
             if t0 < last_block_offset.into(){
                 t1 = u64_wrapping_add(t1, 1);
             }
-            h_new = F(h_old, b_u64_le.span(), t0, t1, true, i, sigma_span, iv);
+            F(ref h_0, ref h_1, ref h_2, ref h_3, ref h_4, ref h_5, ref h_6, ref h_7, b_u64_le.span(), t0, t1, true, i, sigma_span, iv);
         };
 
-        h_old = h_new.span();
         i = i + 1;
     };
+
+    let mut h_new = ArrayTrait::<u64>::new();
+    h_new.append(h_0);
+    h_new.append(h_1);
+    h_new.append(h_2);
+    h_new.append(h_3);
+    h_new.append(h_4);
+    h_new.append(h_5);
+    h_new.append(h_6);
+    h_new.append(h_7);
 
     get_out_u8_be(h_new.span())
 }
