@@ -1,0 +1,8 @@
+[package]
+name = "alexandria_substrate"
+version = "0.1.0"
+description = "Cairo libraries for substrate"
+homepage = "https://github.com/keep-starknet-strange/alexandria/tree/main/src/substrate"
+
+[dependencies]
+alexandria_math = { path = "../math" }
