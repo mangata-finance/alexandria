@@ -6,3 +6,4 @@ homepage = "https://github.com/keep-starknet-strange/alexandria/tree/main/src/su
 
 [dependencies]
 alexandria_math = { path = "../math" }
+alexandria_searching = { path = "../searching" }

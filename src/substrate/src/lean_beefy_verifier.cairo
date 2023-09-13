@@ -1,4 +1,5 @@
 use alexandria_math::BitShift;
+use alexandria_searching::binary_search::binary_search;
 use integer::{u64_wrapping_add, BoundedInt};
 use traits::{Into, TryInto};
 use option::OptionTrait;
@@ -23,6 +24,7 @@ const BEEFY_FINALITY_PROOF_VERSION: u8= 1;
 const BEEFY_PAYLOAD_ID_LEN: usize =2;
 
 
+
 const KECCAK_FULL_RATE_IN_U64S: usize = 17;
 const BYTES_IN_U64_WORD: usize = 8;
 
@@ -39,20 +41,109 @@ struct Slice<T>{
 }
 
 #[derive(Drop, Copy)]
-struct BeefyPayloadEntry<T>{
-    BeefyPayloadId: Slice<u8>,
-    BeefyPayloadValue: Slice<u8>,
+struct BeefyPayloadEntryPlan<T>{
+	span: Span<T>,
+    BeefyPayloadIdPlanStart: usize,
+    BeefyPayloadValuePlan: Range,
 }
 
-#[derive(Drop, Copy)]
-struct BeefyPayloadEntryPlan{
-    BeefyPayloadIdPlan: Range,
-    BeefyPayloadValuePlan: Range,
+impl PartialEqBeefyPayloadEntryPlan<T, impl TEq: PartialEq<T>> of PartialEq<BeefyPayloadEntryPlan<T>> {
+    fn eq(lhs: @BeefyPayloadEntryPlan<T>, rhs: @BeefyPayloadEntryPlan<T>) -> bool {
+		let mut eq = true;
+		let mut itr:usize = 0;
+		loop{
+			if itr== BEEFY_PAYLOAD_ID_LEN {break;}
+			if !TEq::eq((*lhs.span).at(itr+*lhs.BeefyPayloadIdPlanStart), (*rhs.span).at(itr+*rhs.BeefyPayloadIdPlanStart)) {
+				eq=false;
+				break;
+			}
+			itr=itr+1;
+		};
+		eq
+    }
+    fn ne(lhs: @BeefyPayloadEntryPlan<T>, rhs: @BeefyPayloadEntryPlan<T>) -> bool {
+		let mut eq = true;
+		let mut itr:usize = 0;
+		loop{
+			if itr== BEEFY_PAYLOAD_ID_LEN {break;}
+			if !TEq::eq((*lhs.span).at(itr+*lhs.BeefyPayloadIdPlanStart), (*rhs.span).at(itr+*rhs.BeefyPayloadIdPlanStart)) {
+				eq=false;
+				break;
+			}
+			itr=itr+1;
+		};
+		!eq
+    }
+}
+
+impl PartialOrdBeefyPayloadEntryPlan<T, impl TPartialOrd: PartialOrd<T>, impl TCopy: Copy<T>, impl TDrop: Drop<T>> of PartialOrd<BeefyPayloadEntryPlan<T>> {
+	// Big Endian
+    fn le(lhs: BeefyPayloadEntryPlan<T>, rhs: BeefyPayloadEntryPlan<T>) -> bool{
+		!PartialOrdBeefyPayloadEntryPlan::gt(lhs, rhs)
+	}
+    fn ge(lhs: BeefyPayloadEntryPlan<T>, rhs: BeefyPayloadEntryPlan<T>) -> bool{
+		!PartialOrdBeefyPayloadEntryPlan::lt(lhs, rhs)
+	}
+    fn lt(lhs: BeefyPayloadEntryPlan<T>, rhs: BeefyPayloadEntryPlan<T>) -> bool{
+		let mut lt = false;
+		let mut itr:usize = 0;
+		loop{
+			if itr== BEEFY_PAYLOAD_ID_LEN {break;}
+
+			if TPartialOrd::lt(*lhs.span.at(itr+lhs.BeefyPayloadIdPlanStart), *rhs.span.at(itr+rhs.BeefyPayloadIdPlanStart)) {
+				lt=true;
+				break;
+			}
+			if TPartialOrd::gt(*lhs.span.at(itr+lhs.BeefyPayloadIdPlanStart), *rhs.span.at(itr+rhs.BeefyPayloadIdPlanStart)) {
+				lt=false;
+				break;
+			}
+			itr=itr+1;
+		};
+		lt
+	}
+    fn gt(lhs: BeefyPayloadEntryPlan<T>, rhs: BeefyPayloadEntryPlan<T>) -> bool{
+		let mut gt = false;
+		let mut itr:usize = 0;
+		loop{
+			if itr== BEEFY_PAYLOAD_ID_LEN {break;}
+
+			if TPartialOrd::gt(*lhs.span.at(itr+lhs.BeefyPayloadIdPlanStart), *rhs.span.at(itr+rhs.BeefyPayloadIdPlanStart)) {
+				gt=true;
+				break;
+			}
+			if TPartialOrd::lt(*lhs.span.at(itr+lhs.BeefyPayloadIdPlanStart), *rhs.span.at(itr+rhs.BeefyPayloadIdPlanStart)) {
+				gt=false;
+				break;
+			}
+			itr=itr+1;
+		};
+		gt
+	}
+}
+
+fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Option<Span<u8>>{
+	if beefy_payloads.is_empty(){
+		return Option::None;
+	}
+
+	match binary_search(beefy_payloads, BeefyPayloadEntryPlan{
+		span: array![109_u8, 104_u8].span(),
+		BeefyPayloadIdPlanStart: 0_usize,
+    	BeefyPayloadValuePlan: Range{start: BEEFY_PAYLOAD_ID_LEN, end: BEEFY_PAYLOAD_ID_LEN},
+	}) {
+		Option::Some(index) => {
+			let beefy_payload: BeefyPayloadEntryPlan<u8> = *beefy_payloads.at(index);
+			let beefy_payload_value_len:usize = beefy_payload.BeefyPayloadValuePlan.end - beefy_payload.BeefyPayloadValuePlan.start;
+			return Option::Some(beefy_payload.span.slice(beefy_payload.BeefyPayloadValuePlan.start, beefy_payload_value_len));
+			},
+		Option::None => {return Option::None;}
+	}
 }
 
 // We need to also add next validator set here to the input for when the validator set changes and we need to use the next selector
 // Ideally this won't be inputs as such, just accessors
-fn verify_lean_beefy_proof_with_validator_set(buffer: Span<u8>, current_validator_addresses: Span<u8>, next_validator_addresses: Span<u8>, expected_validator_set_id: u64, last_block_number: u32) -> Result<(bool, Array<BeefyPayloadEntryPlan>),felt252>{
+fn verify_lean_beefy_proof_with_validator_set(buffer: Span<u8>, current_validator_addresses: Span<u8>, next_validator_addresses: Span<u8>, expected_validator_set_id: u64, last_block_number: u32) -> Result<Array<BeefyPayloadEntryPlan<u8>>,felt252>{
 
 let mut offset:usize = 0;
 
@@ -65,7 +156,7 @@ let commitment_start: usize = offset;
 
 let number_of_payload_entries = compact_u32_decode(buffer, ref offset)?;
 
-let mut beefy_payloads = ArrayTrait::<BeefyPayloadEntryPlan>::new();
+let mut beefy_payloads = ArrayTrait::<BeefyPayloadEntryPlan<u8>>::new();
 
 let mut itr:usize =0;
 let maybe_err: Result<(),felt252> = loop{
@@ -73,7 +164,7 @@ let maybe_err: Result<(),felt252> = loop{
         break Result::Ok(());
     }
 
-    let beefy_payload_id_plan = Range{start: offset, end: offset+BEEFY_PAYLOAD_ID_LEN};
+    let beefy_payload_id_plan = offset;
     offset=offset+BEEFY_PAYLOAD_ID_LEN;
 
 	let beefy_payload_value_len = match compact_u32_decode(buffer, ref offset){
@@ -86,7 +177,7 @@ let maybe_err: Result<(),felt252> = loop{
     let beefy_payload_value_plan = Range{start: offset, end: offset+beefy_payload_value_len};
     offset=offset+beefy_payload_value_len;
 
-    beefy_payloads.append(BeefyPayloadEntryPlan{BeefyPayloadIdPlan:beefy_payload_id_plan, BeefyPayloadValuePlan: beefy_payload_value_plan});
+    beefy_payloads.append(BeefyPayloadEntryPlan{span: buffer, BeefyPayloadIdPlanStart:beefy_payload_id_plan, BeefyPayloadValuePlan: beefy_payload_value_plan});
 
     itr=itr+1;
 };
@@ -286,9 +377,7 @@ if offset!=buffer.len(){
     return Result::Err('offset not at buffer end');
 }
 
-// DEBUG
-// TODO Remove
-Result::Ok((true, ArrayTrait::<BeefyPayloadEntryPlan>::new()))
+Result::Ok(beefy_payloads)
 }
 
 fn move_over_zeros(bitfield: Slice<u8>, ref bitfield_byte_pointer: usize, ref selector:u8, ref validator_count: usize) -> Result<(),felt252>{
