@@ -17,13 +17,13 @@ use integer::u256;
 use starknet::secp256k1::{Secp256k1Point, Secp256k1PointImpl};
 use starknet::SyscallResultTrait;
 use debug::PrintTrait;
+use zeroable::Zeroable;
 
 const VALIDATOR_ADDRESS_LEN: usize = 20;
 const VALIDATOR_SIGNATURE_LEN: usize = 65;
 const BEEFY_FINALITY_PROOF_VERSION: u8= 1;
 const BEEFY_PAYLOAD_ID_LEN: usize =2;
-
-
+const HASH_LENGTH:usize = 32;
 
 const KECCAK_FULL_RATE_IN_U64S: usize = 17;
 const BYTES_IN_U64_WORD: usize = 8;
@@ -122,22 +122,284 @@ impl PartialOrdBeefyPayloadEntryPlan<T, impl TPartialOrd: PartialOrd<T>, impl TC
 	}
 }
 
-fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Option<Span<u8>>{
+// The hashes in leaves_hashes must be BE
+fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>, leaves_hashes: Span<u8>) -> Result<(),felt252>{
+
+	if mmr_root.len() != HASH_LENGTH{
+		return Result::Err('mmr_root wrong len');
+	}
+
+	let leaves_hashes_len:usize = leaves_hashes.len()/HASH_LENGTH;
+	if (leaves_hashes_len*HASH_LENGTH) != leaves_hashes.len(){
+		return Result::Err('Bad leaves_hashes len');
+	}
+
+	let mut offset:usize = 0;
+
+	let buffer = encoded_mmr_leaves_proof;
+
+	let leaf_indices_len:usize = compact_u32_decode(buffer, ref offset)?;
+	let leaf_indices: Span<u64> = read_u64_array(buffer, ref offset, leaf_indices_len).span();
+
+	if leaf_indices_len != leaves_hashes_len{
+		return Result::Err('indices_len hashes_len mismatch');
+	}
+
+	let mut leaves: Array<(u64, usize)> = array![];
+
+	let mut itr: usize = 0;
+
+	loop{
+		if itr==leaf_indices_len{
+			break;
+		};
+
+		leaves.append((leaf_index_to_pos(*leaf_indices.at(itr)), itr));
+		itr=itr+1;
+	};
+
+	if !is_array_sorted_asc_strict(leaf_indices){
+		return Result::Err('Unsorted proof leaf indices');
+	};
+	
+	let leaf_count: u64 = u64_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 8}});
+	offset=offset + 8;
+
+	let items_len:usize = compact_u32_decode(buffer, ref offset)?;
+	let proof_items = buffer.slice(offset, items_len*HASH_LENGTH);
+	offset=offset+(items_len*HASH_LENGTH);
+
+	if offset != buffer.len(){
+		return Result::Err('offset not at buffer end');
+	}
+
+	let mmr_size: u64 = mmr_size_from_leaf_count(leaf_count);
+	
+	// TODO
+	// Implement and uncomment
+	// let peaks_hashes = calculate_peaks_hashes(leaves, mmr_size, proof_items)?;
+	// TODO
+	// Implement and uncomment
+    // bagging_peaks_hashes(peaks_hashes);
+
+	Result::Err('Debug')
+}
+
+fn all_ones(num: u64) -> bool {
+	num != 0 && (count_zeros(num) == leading_zeros(num))
+}
+
+fn jump_left(pos: u64) -> u64 {
+	let bit_length = 64 - leading_zeros(pos);
+	let most_significant_bits = BitShift::<u64>::shl(1, (bit_length - 1).into());
+	pos - (most_significant_bits - 1)
+}
+
+fn pos_height_in_tree(mut pos: u64) -> u32 {
+    pos += 1;
+    
+    loop  {
+		if all_ones(pos) {break;}
+        pos = jump_left(pos);
+    };
+
+    64 - leading_zeros(pos) - 1
+}
+
+fn parent_offset(height: u32) -> u64 {
+	BitShift::<u32>::shl(2, height).into()
+}
+
+fn sibling_offset(height: u32) -> u64 {
+    (BitShift::<u32>::shl(2, height).into()) - 1
+}
+
+fn get_peaks(mmr_size: u64) -> Array<u64> {
+    let mut pos_s = ArrayTrait::<u64>::new();
+    let (mut height, mut pos) = left_peak_height_pos(mmr_size);
+    pos_s.append(pos);
+    loop {
+		if !(height > 0){break;}
+        let (height, pos) = match get_right_peak(height, pos, mmr_size) {
+            Option::Some(peak) => peak,
+            Option::None => {break;},
+        };
+        pos_s.append(pos);
+    };
+    pos_s
+}
+
+fn get_right_peak(mut height: u32, mut pos: u64, mmr_size: u64) -> Option<(u32, u64)> {
+    // move to right sibling pos
+    pos += sibling_offset(height);
+    // loop until we find a pos in mmr
+    loop {
+		if !(pos > (mmr_size - 1)) {break Option::Some((height, pos));}
+        if height == 0 {
+            break Option::None;
+        }
+        // move to left child
+        pos -= parent_offset(height - 1);
+        height -= 1;
+    }
+}
+
+fn get_peak_pos_by_height(height: u32) -> u64 {
+	(BitShift::<u32>::shl(1, (height + 1)).into()) - 2
+}
+
+fn left_peak_height_pos(mmr_size: u64) -> (u32, u64) {
+    let mut height = 1;
+    let mut prev_pos = 0;
+    let mut pos = get_peak_pos_by_height(height);
+    loop {
+		if !(pos < mmr_size){break;}
+        height += 1;
+        prev_pos = pos;
+        pos = get_peak_pos_by_height(height);
+    };
+    (height - 1, prev_pos)
+}
+
+
+/// Calculate number of peaks in the MMR.
+fn number_of_peaks(no_of_leaves: u64) -> u64 {
+	count_ones(no_of_leaves).into()
+}
+
+/// Calculate the total size of MMR (number of nodes).
+fn mmr_size_from_leaf_count(no_of_leaves: u64) -> u64 {
+	2 * no_of_leaves - number_of_peaks(no_of_leaves)
+}
+
+fn leaf_index_to_pos(index: u64) -> u64 {
+    // mmr_size - H - 1, H is the height(intervals) of last peak
+    leaf_index_to_mmr_size(index) - trailing_zeros(index + 1).into() - 1
+}
+
+fn leaf_index_to_mmr_size(index: u64) -> u64 {
+    // leaf index start with 0
+    let leaves_count = index + 1;
+
+    // the peak count(k) is actually the count of 1 in leaves count's binary representation
+    mmr_size_from_leaf_count(leaves_count)
+}
+
+fn trailing_zeros(mut n: u64) -> u32 {
+	let mut trailing_zeros: u32 = 0;
+	let mut itr: usize =0;
+	loop{
+		if itr == 64{
+			break;
+		}
+		if (n & 1_u64).is_zero(){
+			trailing_zeros = trailing_zeros +1;
+			n = n /2;
+		} else {
+			break;
+		}
+		itr=itr+1;
+	};
+	trailing_zeros
+}
+
+fn leading_zeros(mut n: u64) -> u32 {
+	let mut leading_zeros: u32 = 0;
+	let mut itr: usize =0;
+	loop{
+		if itr == 64{
+			break;
+		}
+		if (n & 0x8000000000000000_u64).is_zero(){
+			leading_zeros = leading_zeros +1;
+			n = n * 2;
+		} else {
+			break;
+		}
+		itr=itr+1;
+	};
+	leading_zeros
+}
+
+fn count_ones(mut n: u64) -> u32 {
+    let mut count = 0;
+    loop {
+        if n.is_zero() {
+            break count;
+        }
+        n = n & (n - 1);
+        count += 1;
+    }
+}
+
+fn count_zeros(n: u64) -> u32 {
+    64_u32 - count_ones(n)
+}
+
+fn is_array_sorted_asc_strict<T, impl TDrop: Drop<T>, impl TCopy: Copy<T>, impl TPartialOrd: PartialOrd<T>,>(array: Span<T>) -> bool{
+
+	let mut is_array_sorted_asc_strict = true;
+	let mut itr:usize=1;
+	let array_len = array.len();
+
+	loop{
+		if itr >= array_len{break;}
+
+		if !TPartialOrd::gt(*array.at(itr), *array.at(itr-1)) {
+			is_array_sorted_asc_strict = false;
+			break;
+		}
+
+		itr=itr+1;
+	};
+
+	is_array_sorted_asc_strict
+}
+
+fn read_u64_array(buffer: Span<u8>, ref offset: usize, len: usize) -> Array<u64>{
+	let mut leaf_indices: Array<u64> = array![];
+	let mut itr:usize=0;
+
+	loop{
+		if itr == len{
+			break;
+		}
+
+		let val = u64_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 8}});
+		offset=offset + 8;
+		
+		leaf_indices.append(val);
+
+		itr=itr+1;
+	};
+
+	leaf_indices
+}
+
+fn get_mmr_root_payload_id() -> Span<u8> {
+	array![109_u8, 104_u8].span()
+}
+
+fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Result<Span<u8>, felt252>{
 	if beefy_payloads.is_empty(){
-		return Option::None;
+		return Result::Err('beefy_payloads is empty');
 	}
 
 	match binary_search(beefy_payloads, BeefyPayloadEntryPlan{
-		span: array![109_u8, 104_u8].span(),
+		span: get_mmr_root_payload_id(),
 		BeefyPayloadIdPlanStart: 0_usize,
     	BeefyPayloadValuePlan: Range{start: BEEFY_PAYLOAD_ID_LEN, end: BEEFY_PAYLOAD_ID_LEN},
 	}) {
 		Option::Some(index) => {
 			let beefy_payload: BeefyPayloadEntryPlan<u8> = *beefy_payloads.at(index);
 			let beefy_payload_value_len:usize = beefy_payload.BeefyPayloadValuePlan.end - beefy_payload.BeefyPayloadValuePlan.start;
-			return Option::Some(beefy_payload.span.slice(beefy_payload.BeefyPayloadValuePlan.start, beefy_payload_value_len));
+			if beefy_payload_value_len == HASH_LENGTH{
+				return Result::Ok(beefy_payload.span.slice(beefy_payload.BeefyPayloadValuePlan.start, beefy_payload_value_len));
+			} else {
+				return Result::Err('mmr_root not 32 bytes long');
+			}
 			},
-		Option::None => {return Option::None;}
+		Option::None => {return Result::Err('mmr_root not in beefy_payloads');}
 	}
 }
 
