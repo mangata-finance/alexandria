@@ -18,7 +18,6 @@ use starknet::secp256k1::{Secp256k1Point, Secp256k1PointImpl};
 use starknet::SyscallResultTrait;
 use debug::PrintTrait;
 use zeroable::Zeroable;
-
 const VALIDATOR_ADDRESS_LEN: usize = 20;
 const VALIDATOR_SIGNATURE_LEN: usize = 65;
 const BEEFY_FINALITY_PROOF_VERSION: u8= 1;
@@ -145,7 +144,13 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 		return Result::Err('indices_len hashes_len mismatch');
 	}
 
-	let mut leaves: Array<(u64, usize)> = array![];
+	if !is_array_sorted_asc_strict(leaf_indices){
+		return Result::Err('Unsorted proof leaf indices');
+	};
+
+	let leaves_hashes_be_u256s = hashes_to_u256s(leaves_hashes)?;
+
+	let mut leaves: Array<(u64, u256)> = array![];
 
 	let mut itr: usize = 0;
 
@@ -154,7 +159,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 			break;
 		};
 
-		leaves.append((leaf_index_to_pos(*leaf_indices.at(itr)), itr));
+		leaves.append((leaf_index_to_pos(*leaf_indices.at(itr)), *leaves_hashes_be_u256s.at(itr)));
 		itr=itr+1;
 	};
 
@@ -174,15 +179,88 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 	}
 
 	let mmr_size: u64 = mmr_size_from_leaf_count(leaf_count);
-	
-	// TODO
-	// Implement and uncomment
-	// let peaks_hashes = calculate_peaks_hashes(leaves, mmr_size, proof_items)?;
-	// TODO
-	// Implement and uncomment
-    // bagging_peaks_hashes(peaks_hashes);
 
+	let proof_items_be_u256 = hashes_to_u256s(proof_items)?;
+	
+	let calculated_root_be_u256 = calculate_root(leaves, mmr_size, proof_items_be_u256.span())?;
+
+	// Following would never fail due to previous len check
+	let mmr_root_be_u256 = *hashes_to_u256s(mmr_root)?.at(0);
+
+	if mmr_root_be_u256 == calculated_root_be_u256 {
+		return Result::Ok(());
+	} else {
+		return Result::Err('Mmr root mismatch');
+	}
+
+	// Result::Err('Debug')
+}
+
+fn bagging_peaks_hashes(peaks_hashes: Span<u256>) -> Result<u256, felt252> {
+	let peaks_hashes_len: usize = peaks_hashes.len();
+
+	if peaks_hashes_len.is_zero(){
+		return Result::Err('No peaks to bag');
+	}
+	if peaks_hashes_len == 1{
+		return Result::Ok(*peaks_hashes.at(0));
+	}
+
+	let mut acc: u256 = *peaks_hashes.at(peaks_hashes_len - 1);
+	let mut itr: usize = peaks_hashes_len - 2;
+
+	loop{
+
+		let merge_hash_le: u256 = keccak_u256s_be_inputs(array![acc, *peaks_hashes.at(itr)].span());
+		acc = u256_byte_reverse(merge_hash_le);
+
+		if itr == 0 {break;}
+		itr = itr -1;
+	};
+
+	Result::Ok(acc)
+
+}
+
+fn calculate_peaks_hashes(leaves: Array<(u64, u256)>, mmr_size: u64, proof_items: Span<u256>) -> Result<Array<u256>, felt252>{
 	Result::Err('Debug')
+
+}
+
+fn calculate_root(leaves: Array<(u64, u256)>, mmr_size: u64, proof_items: Span<u256>) -> Result<u256, felt252>{
+	
+	let peaks_hashes_be_u256: Array<u256> = calculate_peaks_hashes(leaves, mmr_size, proof_items)?;
+	
+    bagging_peaks_hashes(peaks_hashes_be_u256.span())
+	// Result::Err('Debug')
+}
+
+fn hashes_to_u256s(hashes: Span<u8>) -> Result<Array<u256>, felt252>{
+	let hashes_len: usize = hashes.len()/HASH_LENGTH;
+	if (hashes_len*HASH_LENGTH) != hashes.len(){
+		return Result::Err('Bad hashes len');
+	}
+
+	let mut itr:usize = 0;
+	let mut val_u256:u256 = 0;
+	let mut be_u256s: Array<u256> = array![];
+	let mut citr: usize = 0;
+
+	loop{
+		if itr == hashes_len{break;}
+		val_u256=0;
+		citr = 0;
+
+		loop {
+			if citr == HASH_LENGTH{break;}
+				val_u256 = Into::<u8,u256>::into(*hashes.at(itr*HASH_LENGTH+citr)) + val_u256*256_u256;
+			citr=citr+1;
+		};
+
+		be_u256s.append(val_u256);
+		itr=itr+1;
+	};
+	Result::Ok(be_u256s)
 }
 
 fn all_ones(num: u64) -> bool {
@@ -462,7 +540,7 @@ let commitment_end: usize = offset;
 let commitment = Slice{span: buffer, range: Range{start:commitment_start, end:commitment_end}};
 
 let commitment_pre_hashed_le = keccak(commitment);
-let commitment_pre_hashed = u256_le_to_be(commitment_pre_hashed_le);
+let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
 let mut validator_addresses = current_validator_addresses;
 let is_next_validator_set_id: bool =false;
@@ -780,7 +858,7 @@ fn array_eq_slice(a: Array<u8>, s:Slice<u8>) -> bool{
 	is_eq
 }
 
-fn u256_le_to_be(le: u256) -> u256{
+fn u256_byte_reverse(le: u256) -> u256{
 	u256{high: integer::u128_byte_reverse(le.low), low: integer::u128_byte_reverse(le.high)}
 }
 
@@ -966,4 +1044,46 @@ fn finalize_padding(ref input: Array<u64>, num_padding_words: u32) {
 
     input.append(0);
     finalize_padding(ref input, num_padding_words - 1);
+}
+
+fn keccak_add_u256_be(ref keccak_input: Array::<u64>, v: u256) {
+    let (high, low) = u128_split(integer::u128_byte_reverse(v.high));
+    keccak_input.append(low);
+    keccak_input.append(high);
+    let (high, low) = u128_split(integer::u128_byte_reverse(v.low));
+    keccak_input.append(low);
+    keccak_input.append(high);
+}
+
+// Computes the keccak256 of multiple u256 values.
+// The input values are interpreted as big-endian.
+// The 32-byte result is represented as a little-endian u256.
+fn keccak_u256s_be_inputs(mut input: Span<u256>) -> u256 {
+    let mut keccak_input: Array::<u64> = Default::default();
+
+    loop {
+        match input.pop_front() {
+            Option::Some(v) => {
+                keccak_add_u256_be(ref keccak_input, *v);
+            },
+            Option::None => {
+                break ();
+            },
+        };
+    };
+
+    add_padding(ref keccak_input, 0, 0);
+    starknet::syscalls::keccak_syscall(keccak_input.span()).unwrap_syscall()
+}
+
+fn u128_split(input: u128) -> (u64, u64) {
+    let (high, low) = integer::u128_safe_divmod(
+        input, 0x10000000000000000_u128.try_into().unwrap()
+    );
+
+    (u128_to_u64(high), u128_to_u64(low))
+}
+
+fn u128_to_u64(input: u128) -> u64 {
+    input.try_into().unwrap()
 }
