@@ -18,6 +18,11 @@ use starknet::secp256k1::{Secp256k1Point, Secp256k1PointImpl};
 use starknet::SyscallResultTrait;
 use debug::PrintTrait;
 use zeroable::Zeroable;
+use box::BoxTrait;
+
+
+
+
 const VALIDATOR_ADDRESS_LEN: usize = 20;
 const VALIDATOR_SIGNATURE_LEN: usize = 65;
 const BEEFY_FINALITY_PROOF_VERSION: u8= 1;
@@ -37,6 +42,19 @@ struct Range{
 struct Slice<T>{
     span: Span<T>,
     range: Range,
+}
+
+#[derive(Drop, Copy)]
+struct Leaf{
+    pos: u64,
+    hash: u256,
+}
+
+#[derive(Drop, Copy)]
+struct LeafWithHeight{
+    pos: u64,
+    hash: u256,
+	height: u32
 }
 
 #[derive(Drop, Copy)]
@@ -150,7 +168,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 
 	let leaves_hashes_be_u256s = hashes_to_u256s(leaves_hashes)?;
 
-	let mut leaves: Array<(u64, u256)> = array![];
+	let mut leaves: Array<Leaf> = array![];
 
 	let mut itr: usize = 0;
 
@@ -159,7 +177,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 			break;
 		};
 
-		leaves.append((leaf_index_to_pos(*leaf_indices.at(itr)), *leaves_hashes_be_u256s.at(itr)));
+		leaves.append(Leaf{pos: leaf_index_to_pos(*leaf_indices.at(itr)), hash: *leaves_hashes_be_u256s.at(itr)});
 		itr=itr+1;
 	};
 
@@ -182,7 +200,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 
 	let proof_items_be_u256 = hashes_to_u256s(proof_items)?;
 	
-	let calculated_root_be_u256 = calculate_root(leaves, mmr_size, proof_items_be_u256.span())?;
+	let calculated_root_be_u256 = calculate_root(leaves.span(), mmr_size, proof_items_be_u256.span())?;
 
 	// Following would never fail due to previous len check
 	let mmr_root_be_u256 = *hashes_to_u256s(mmr_root)?.at(0);
@@ -222,12 +240,191 @@ fn bagging_peaks_hashes(peaks_hashes: Span<u256>) -> Result<u256, felt252> {
 
 }
 
-fn calculate_peaks_hashes(leaves: Array<(u64, u256)>, mmr_size: u64, proof_items: Span<u256>) -> Result<Array<u256>, felt252>{
-	Result::Err('Debug')
+fn calculate_peaks_hashes(mut leaves: Span<Leaf>, mmr_size: u64, mut proof_items: Span<u256>) -> Result<Array<u256>, felt252>{
+
+	if leaves.is_empty(){
+		return Result::Err('No leaves to verify');
+	}
+
+	let mut itr: usize =0;
+
+	let maybe_err: Result<(), felt252> = loop{
+		if itr==leaves.len(){break Result::Ok(());}
+		if pos_height_in_tree(*leaves.at(itr).pos) > 0{
+			break Result::Err('Leaves have non-zero height');
+		}
+		itr = itr +1;
+	};
+
+	match maybe_err {
+		Result::Ok(_) => {},
+		Result::Err(e) => {return Result::Err(e);}
+	};
+
+	if mmr_size == 1 && leaves.len() == 1 && (*leaves.at(0).pos).is_zero(){
+		return Result::Ok(array![*leaves.at(0).hash]);
+	}
+
+	let peaks = get_peaks(mmr_size);
+	let mut peaks_hashes: Array<u256> = array![];
+
+	itr=0;
+
+	loop{
+		if itr == peaks.len(){break;}
+		let leaves_for_peak = get_leaves_for_peak(ref leaves, *peaks.at(itr));
+		let mut peak_root: u256 = 0; //dummy init
+		if leaves_for_peak.len() == 1 && *leaves_for_peak.at(0).pos == *peaks.at(itr){
+				peak_root = *leaves_for_peak.at(0).hash;
+			}
+			else if leaves_for_peak.is_empty(){
+				match proof_items.pop_front() {
+					Option::Some(h) => {
+						peak_root = *h;
+					},
+					Option::None(()) => {
+						break;
+					},
+				};
+			} else {
+				peak_root = calculate_peak_root(leaves_for_peak, *peaks.at(itr), ref proof_items)?;
+			};
+		peaks_hashes.append(peak_root);
+		itr = itr +1;
+	};
+
+	if !leaves.is_empty(){
+		return Result::Err('leaves not empty at end');
+	}
+
+	match proof_items.pop_front() {
+					Option::Some(h) => {
+						peaks_hashes.append(*h);
+					},
+					Option::None(()) => {
+					},
+				};
+
+	match proof_items.pop_front() {
+					Option::Some(h) => {
+						return Result::Err('Corrupted proof');
+					},
+					Option::None(()) => {
+					},
+				};
+
+	Result::Ok(peaks_hashes)
 
 }
 
-fn calculate_root(leaves: Array<(u64, u256)>, mmr_size: u64, proof_items: Span<u256>) -> Result<u256, felt252>{
+fn calculate_peak_root(leaves: Span<Leaf>, peak_pos: u64, ref proof_items: Span<u256>) -> Result<u256, felt252>{
+
+	let mut itr: usize =0;
+	let mut queue: Array<(u64, u256, u32)> = array![];
+
+	loop{
+		if itr == leaves.len(){break;}
+		let leaf = *leaves.at(itr);
+		queue.append((leaf.pos,leaf.hash,0_u32));
+		itr = itr + 1;
+	};
+
+	let result: Result<u256, felt252> = loop{
+		match queue.pop_front() {
+			Option::Some((pos, item, height)) => {
+				if pos == peak_pos {
+					if queue.is_empty() {
+						break Result::Ok(item);
+					} else {
+						break Result::Err('Corrupted proof');
+					}
+				}
+				// calculate sibling
+				let next_height = pos_height_in_tree(pos + 1);
+				let (sib_pos, parent_pos) = {
+					let sibling_offset = sibling_offset(height);
+					if next_height > height {
+						// implies pos is right sibling
+						(pos - sibling_offset, pos + 1)
+					} else {
+						// pos is left sibling
+						(pos + sibling_offset, pos + parent_offset(height))
+					}
+				};
+
+				let mut sibling_item: u256 = 0_u256; // dummy init
+				let mut is_sibling_item_in_queue: bool = false;
+				match queue.get(0){
+					Option::Some(v) => {
+						let (s_pos, _, _) = *v.unbox();
+						if s_pos==sib_pos {
+							is_sibling_item_in_queue = true;
+						}
+					},
+					Option::None(()) => {
+					},
+				};
+
+				if is_sibling_item_in_queue {
+					match queue.pop_front() {
+						Option::Some((_, s_item, _)) => {
+							sibling_item = s_item;
+						},
+						Option::None(()) => {
+							break Result::Err('queue.get(0) exists');
+						},
+					}
+				} else {
+					match proof_items.pop_front() {
+						Option::Some(h) => {
+							sibling_item = *h;
+						},
+						Option::None(()) => {
+							break Result::Err('Corrupted proof');
+						},
+					}
+				}
+
+				let mut parent_item: u256 = 0_u256;
+				if next_height > height{
+					let merge_hash_le: u256 = keccak_u256s_be_inputs(array![sibling_item, item].span());
+					parent_item = u256_byte_reverse(merge_hash_le);
+				} else {
+					let merge_hash_le: u256 = keccak_u256s_be_inputs(array![item, sibling_item].span());
+					parent_item = u256_byte_reverse(merge_hash_le);
+				};
+
+				if parent_pos <= peak_pos{
+					queue.append((parent_pos, parent_item, height + 1));
+				} else {
+					break Result::Err('Corrupted proof');
+				}
+
+			},
+			Option::None(()) => {
+				break Result::Err('Corrupted proof');
+			},
+		};
+	};
+	result
+
+}
+
+fn get_leaves_for_peak(ref leaves: Span<Leaf>, peak_pos: u64) -> Span<Leaf>{
+	let mut itr: usize = 0;
+	loop{
+		if itr == leaves.len() {break;}
+		if *leaves.at(itr).pos > peak_pos{
+			break;
+		}
+		itr = itr + 1;
+	};
+	let leaves_for_peak = leaves.slice(0, itr);
+	leaves = leaves.slice(itr, leaves.len() - itr);
+	leaves_for_peak
+}
+
+fn calculate_root(leaves: Span<Leaf>, mmr_size: u64, proof_items: Span<u256>) -> Result<u256, felt252>{
 	
 	let peaks_hashes_be_u256: Array<u256> = calculate_peaks_hashes(leaves, mmr_size, proof_items)?;
 	
