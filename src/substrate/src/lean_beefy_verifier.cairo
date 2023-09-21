@@ -139,17 +139,47 @@ impl PartialOrdBeefyPayloadEntryPlan<T, impl TPartialOrd: PartialOrd<T>, impl TC
 	}
 }
 
+fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt252>{
+	let mut offset: usize = 0;
+
+	let number_leaves: usize = compact_u32_decode(buffer, ref offset)?;
+		offset.print();
+
+	let mut hashes: Array<u256> = array![];
+	let mut itr: usize =0;
+	let maybe_err: Result<(),felt252> = loop{
+		if itr == number_leaves{break Result::Ok(());}
+		let leaf_length = match compact_u32_decode(buffer, ref offset){
+					Result::Ok(l)=> {l},
+					Result::Err(e) => {break Result::Err(e);}
+				};
+		offset.print(); leaf_length.print();
+		let hash_le: u256 = keccak(Slice{span: buffer, range: Range{start:offset, end: offset+leaf_length}});
+		let hash: u256 = u256_byte_reverse(hash_le);
+		hashes.append(hash);
+		offset = offset + leaf_length;
+		itr=itr+1;
+	};
+
+	match maybe_err {
+		Result::Ok(_) => {},
+		Result::Err(e) => {return Result::Err(e);}
+	};
+
+	if offset!=buffer.len(){
+		return Result::Err('offset not at buffer end');
+	}
+	Result::Ok(hashes)
+}
+
 // The hashes in leaves_hashes must be BE
-fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>, leaves_hashes: Span<u8>) -> Result<(),felt252>{
+fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>, leaves_hashes_be_u256s: Span<u256>) -> Result<(),felt252>{
 
 	if mmr_root.len() != HASH_LENGTH{
 		return Result::Err('mmr_root wrong len');
 	}
 
-	let leaves_hashes_len:usize = leaves_hashes.len()/HASH_LENGTH;
-	if (leaves_hashes_len*HASH_LENGTH) != leaves_hashes.len(){
-		return Result::Err('Bad leaves_hashes len');
-	}
+	let leaves_hashes_len:usize = leaves_hashes_be_u256s.len();
 
 	let mut offset:usize = 0;
 
@@ -165,8 +195,6 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 	if !is_array_sorted_asc_strict(leaf_indices){
 		return Result::Err('Unsorted proof leaf indices');
 	};
-
-	let leaves_hashes_be_u256s = hashes_to_u256s(leaves_hashes)?;
 
 	let mut leaves: Array<Leaf> = array![];
 
@@ -270,8 +298,8 @@ fn calculate_peaks_hashes(mut leaves: Span<Leaf>, mmr_size: u64, mut proof_items
 
 	itr=0;
 
-	loop{
-		if itr == peaks.len(){break;}
+	let maybe_err: Result<(),felt252> = loop{
+		if itr == peaks.len(){break Result::Ok(());}
 		let leaves_for_peak = get_leaves_for_peak(ref leaves, *peaks.at(itr));
 		let mut peak_root: u256 = 0; //dummy init
 		if leaves_for_peak.len() == 1 && *leaves_for_peak.at(0).pos == *peaks.at(itr){
@@ -283,14 +311,22 @@ fn calculate_peaks_hashes(mut leaves: Span<Leaf>, mmr_size: u64, mut proof_items
 						peak_root = *h;
 					},
 					Option::None(()) => {
-						break;
+						break Result::Ok(());
 					},
 				};
 			} else {
-				peak_root = calculate_peak_root(leaves_for_peak, *peaks.at(itr), ref proof_items)?;
+				match calculate_peak_root(leaves_for_peak, *peaks.at(itr), ref proof_items){
+					Result::Ok(r)=> {peak_root = r},
+					Result::Err(e) => {break Result::Err(e);}
+				}
 			};
 		peaks_hashes.append(peak_root);
 		itr = itr +1;
+	};
+
+	match maybe_err {
+		Result::Ok(_) => {},
+		Result::Err(e) => {return Result::Err(e);}
 	};
 
 	if !leaves.is_empty(){

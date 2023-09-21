@@ -1,20 +1,36 @@
 use array::{ArrayTrait, SpanTrait};
-use alexandria_substrate::lean_beefy_verifier::{verify_lean_beefy_proof_with_validator_set, u256_le_to_be, keccak, Slice, Range, verify_eth_signature_pre_hashed};
-use alexandria_substrate::substrate_storage_read_proof_verifier::{convert_u8_subarray_to_u8_array};
+use alexandria_substrate::lean_beefy_verifier::{verify_mmr_leaves_proof,encoded_opaque_leaves_to_hashes,get_mmr_root, verify_lean_beefy_proof_with_validator_set, u256_byte_reverse, keccak, Slice, Range, verify_eth_signature_pre_hashed};
+use alexandria_substrate::substrate_storage_read_proof_verifier::{convert_u8_subarray_to_u8_array, u8_array_eq};
+use alexandria_substrate::blake2b::convert_u8_array_to_felt252_array;
 use debug::PrintTrait;
 use result::ResultTrait;
+use core::clone::Clone;
 
 #[test]
 #[available_gas(20000000000)]
 fn test_lean_beefy_proof_verification() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof().span(), get_current_validator_addresses().span(), ArrayTrait::<u8>::new().span(), 3, 39);
-    match res{
-        Result::Ok(_)=>{},
+    let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
+        Result::Ok(beefy_payloads)=>{
+            get_mmr_root(beefy_payloads.span())},
+        Result::Err(e)=>{e.print(); Result::Err('Dummy return')},
+    };
+    // panic(convert_u8_array_to_felt252_array(maybe_mmr_root.unwrap()));
+    match maybe_mmr_root{
+        Result::Ok(mmr_root)=>{ assert(u8_array_eq(mmr_root, get_expected_mmr_root().span()), 'mmr_root mismatch');},
         Result::Err(e)=>e.print(),
     };
+
     // let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     // assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
+}
+
+// [179, 10, 26, 159, 204, 101, 198, 159, 193, 248, 252, 202, 209, 86, 155, 24, 110, 223, 138, 34, 95, 114, 204, 31, 32, 122, 203, 1, 9, 158, 139, 81]
+fn get_expected_mmr_root() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(179);i.append(10);i.append(26);i.append(159);i.append(204);i.append(101);i.append(198);i.append(159);i.append(193);i.append(248);i.append(252);i.append(202);i.append(209);i.append(86);i.append(155);i.append(24);i.append(110);i.append(223);i.append(138);i.append(34);i.append(95);i.append(114);i.append(204);i.append(31);i.append(32);i.append(122);i.append(203);i.append(1);i.append(9);i.append(158);i.append(139);i.append(81);
+    i
 }
 
 // finality_proof: V1(SignedCommitment { commitment: Commitment { payload: Payload([([109, 104], [179, 10, 26, 159, 204, 101, 198, 159, 193, 248, 252, 202, 209, 86, 155, 24, 110, 223, 138, 34, 95, 114, 204, 31, 32, 122, 203, 1, 9, 158, 139, 81])]), block_number: 39, validator_set_id: 3 }, signatures: [Some(Signature(78163315cf79e7d63f48cbd76b6f104f647d070145cd5efdcb83ff48dd8bf85d3fa53daf5a5862d7605d5cfcafbecd58e3a63710bf22d675e378a78032bbb70b00))] }).    
@@ -41,13 +57,26 @@ fn get_current_validator_addresses() -> Array<u8> {
 #[available_gas(20000000000)]
 fn test_lean_beefy_proof_verification_2() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof_2().span(), get_current_validator_addresses_2().span(), ArrayTrait::<u8>::new().span(), 7, 79);
-    match res{
-        Result::Ok(_)=>{},
+    let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
+        Result::Ok(beefy_payloads)=>{
+            get_mmr_root(beefy_payloads.span())},
+        Result::Err(e)=>{e.print(); Result::Err('Dummy return')},
+    };
+
+    match maybe_mmr_root{
+        Result::Ok(mmr_root)=>{ assert(u8_array_eq(mmr_root, get_expected_mmr_root_2().span()), 'mmr_root mismatch');},
         Result::Err(e)=>e.print(),
     };
     // let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
     // assert(u8_array_eq(rs.span(), ers.span()), 'Raw storage must be as expected');
 
+}
+
+// [9, 60, 135, 194, 44, 243, 27, 165, 135, 135, 229, 11, 224, 172, 76, 236, 61, 110, 240, 137, 146, 98, 184, 184, 64, 91, 232, 194, 81, 142, 207, 195]
+fn get_expected_mmr_root_2() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(9);i.append(60);i.append(135);i.append(194);i.append(44);i.append(243);i.append(27);i.append(165);i.append(135);i.append(135);i.append(229);i.append(11);i.append(224);i.append(172);i.append(76);i.append(236);i.append(61);i.append(110);i.append(240);i.append(137);i.append(146);i.append(98);i.append(184);i.append(184);i.append(64);i.append(91);i.append(232);i.append(194);i.append(81);i.append(142);i.append(207);i.append(195);
+    i
 }
 
 fn get_lean_beefy_proof_2() -> Array<u8> {
@@ -67,7 +96,7 @@ fn get_current_validator_addresses_2() -> Array<u8> {
 fn test_verify_eth_signature_pre_hashed() {
     let msg = get_msg().span();
     let commitment_pre_hashed_le = keccak(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
-    let commitment_pre_hashed = u256_le_to_be(commitment_pre_hashed_le);
+    let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
     let add = get_add().span();
     let add_slice = Slice{span: add, range: Range{start:0,end:add.len()}};
@@ -76,7 +105,8 @@ fn test_verify_eth_signature_pre_hashed() {
     let sig_slice = Slice{span: sig, range: Range{start:0,end:sig.len()}};
 
     let res = verify_eth_signature_pre_hashed(commitment_pre_hashed, sig_slice, add_slice);
-    res.print();
+    assert(res, 'Sig ver failed');
+    // res.print();
     // match res{
     //     Result::Ok(_)=>{},
     //     Result::Err(e)=>e.print(),
@@ -108,7 +138,7 @@ fn get_sig() -> Array<u8> {
 fn test_verify_eth_signature_pre_hashed_2() {
     let msg = get_msg_2().span();
     let commitment_pre_hashed_le = keccak(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
-    let commitment_pre_hashed = u256_le_to_be(commitment_pre_hashed_le);
+    let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
     let add = get_add_2().span();
     let add_slice = Slice{span: add, range: Range{start:0,end:add.len()}};
@@ -117,7 +147,8 @@ fn test_verify_eth_signature_pre_hashed_2() {
     let sig_slice = Slice{span: sig, range: Range{start:0,end:sig.len()}};
 
     let res = verify_eth_signature_pre_hashed(commitment_pre_hashed, sig_slice, add_slice);
-    res.print();
+    assert(res, 'Sig ver failed');
+    // res.print();
     // match res{
     //     Result::Ok(_)=>{},
     //     Result::Err(e)=>e.print(),
@@ -144,3 +175,38 @@ fn get_sig_2() -> Array<u8> {
     i
 }
 
+
+#[test]
+#[available_gas(20000000000)]
+fn verify_mmr_leaves_proof_test(){
+    let leaves_hashes = encoded_opaque_leaves_to_hashes(get_leaves().span()).unwrap();
+    let res = verify_mmr_leaves_proof(array![].span(), get_proof().span(), leaves_hashes.span());
+
+
+}
+
+fn get_leaves() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(0x04);i.append(0xc5);i.append(0x01);i.append(0x00);i.append(0x04);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x27);i.append(0x44);i.append(0xcc);i.append(0x3e);i.append(0x4b);i.append(0x2f);i.append(0x9d);i.append(0x1d);i.append(0x92);i.append(0xce);i.append(0xa9);i.append(0x3b);i.append(0x8c);i.append(0x1c);i.append(0xad);i.append(0x27);i.append(0x76);i.append(0x7e);i.append(0x41);i.append(0xe5);i.append(0x21);i.append(0x42);i.append(0x70);i.append(0xe2);i.append(0x19);i.append(0xd6);i.append(0x11);i.append(0xe3);i.append(0x0d);i.append(0x28);i.append(0xd2);i.append(0xcc);i.append(0x01);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x01);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0xae);i.append(0xb4);i.append(0x7a);i.append(0x26);i.append(0x93);i.append(0x93);i.append(0x29);i.append(0x7f);i.append(0x4b);i.append(0x0a);i.append(0x3c);i.append(0x9c);i.append(0x9c);i.append(0xfd);i.append(0x00);i.append(0xc7);i.append(0xa4);i.append(0x19);i.append(0x52);i.append(0x55);i.append(0x27);i.append(0x4c);i.append(0xf3);i.append(0x9d);i.append(0x83);i.append(0xda);i.append(0xbc);i.append(0x2f);i.append(0xcc);i.append(0x9f);i.append(0xf3);i.append(0xd7);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);
+    i
+}
+
+fn get_proof() -> Array<u8> {
+    let mut i: Array<u8> = Default::default();
+    i.append(0x04);i.append(0x04);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x0a);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x00);i.append(0x10);i.append(0x3b);i.append(0xac);i.append(0xf5);i.append(0xac);i.append(0x3f);i.append(0xf9);i.append(0x12);i.append(0xcc);i.append(0xd0);i.append(0xb2);i.append(0x02);i.append(0x68);i.append(0xad);i.append(0x05);i.append(0x4a);i.append(0xef);i.append(0xd2);i.append(0xde);i.append(0x8d);i.append(0x23);i.append(0x3a);i.append(0xec);i.append(0xe8);i.append(0x16);i.append(0x6c);i.append(0xb1);i.append(0x58);i.append(0xfc);i.append(0xa1);i.append(0x0f);i.append(0x2b);i.append(0xfd);i.append(0xa5);i.append(0xe1);i.append(0xca);i.append(0xfc);i.append(0xd9);i.append(0x50);i.append(0x44);i.append(0x96);i.append(0x65);i.append(0xff);i.append(0x18);i.append(0x86);i.append(0xa3);i.append(0x1a);i.append(0xba);i.append(0x5a);i.append(0x70);i.append(0x2c);i.append(0x6a);i.append(0xe6);i.append(0x44);i.append(0xdf);i.append(0x4b);i.append(0x36);i.append(0xc2);i.append(0xd4);i.append(0x1c);i.append(0x3a);i.append(0x27);i.append(0xed);i.append(0x83);i.append(0x8c);i.append(0x86);i.append(0x91);i.append(0x78);i.append(0x51);i.append(0x80);i.append(0x2d);i.append(0x6c);i.append(0xf4);i.append(0x21);i.append(0xf5);i.append(0x68);i.append(0x77);i.append(0x29);i.append(0xba);i.append(0x4a);i.append(0x43);i.append(0x60);i.append(0xe3);i.append(0xf6);i.append(0x1a);i.append(0x2e);i.append(0x76);i.append(0x40);i.append(0xfa);i.append(0xef);i.append(0x05);i.append(0x85);i.append(0x11);i.append(0x84);i.append(0x3b);i.append(0xde);i.append(0x81);i.append(0xe2);i.append(0x99);i.append(0x90);i.append(0x1d);i.append(0x86);i.append(0x88);i.append(0xfb);i.append(0x6f);i.append(0xf7);i.append(0xda);i.append(0xff);i.append(0x09);i.append(0x2c);i.append(0x5b);i.append(0xad);i.append(0xf2);i.append(0xd1);i.append(0x11);i.append(0xf1);i.append(0x76);i.append(0x8b);i.append(0x2a);i.append(0x1f);i.append(0x74);i.append(0x86);i.append(0xa8);i.append(0xce);i.append(0x15);i.append(0x74);i.append(0x6a);i.append(0xd5);i.append(0xdb);
+    i
+}
+
+// #1
+// {
+//   blockHash: 0xd68689ad3b1e430c9c1bdd45250792c1849afde61b761a87bd327701a73939af
+//   leaves: 0x04c50100040000002744cc3e4b2f9d1d92cea93b8c1cad27767e41e5214270e219d611e30d28d2cc010000000000000001000000aeb47a269393297f4b0a3c9c9cfd00c7a4195255274cf39d83dabc2fcc9ff3d70000000000000000000000000000000000000000000000000000000000000000
+//   proof: 0x0404000000000000000a00000000000000103bacf5ac3ff912ccd0b20268ad054aefd2de8d233aece8166cb158fca10f2bfda5e1cafcd950449665ff1886a31aba5a702c6ae644df4b36c2d41c3a27ed838c86917851802d6cf421f5687729ba4a4360e3f61a2e7640faef058511843bde81e299901d8688fb6ff7daff092c5badf2d111f1768b2a1f7486a8ce15746ad5db
+// }
+
+// #2
+// {
+//   blockHash: 0xf4e7fd42605a1f1a1d62fc6e71a3ce3be716c253e2baee794298362e83f90a4a
+//   leaves: 0x04c501008f486d000177bc87189c450ce54ab78ddc73a601dbdc2de2bf522ebac658c485721e2742f02f0000000000006f00000003aff613b52959e3045f7ccbdef689259ee659ed2907cc28eb24fcafa65e281c044f454c1319230bbfbea1f4a999a43304365af54945e36ea8f9548946d07c1d
+//   proof: 0x04133d330000000000893e3300000000004840dc3a58d2acbceacb547040880fc7615e6754e2ee366d5f9a6ecd1fec3984f7006050bb6734ed9a77b40d03bc4b877b6ba82212cb64205ef119aaae94969dc19508c9e68a69073066f39c0dedf492410998c3c6ab37b930d698bf722efee82b6979d17be05374274cbec6d6b994062d99801c69665a68c0ec6a952a51c46970ea70b4e37e7b1e4e959cdef784e29ee0d7efc31e39d3c7b4c40aecf1ba4a0ba5b06eb968e8374c60cbfed25d961f7c902e54910364fd042e343faa236cc80a8a91d0571158306c2c60acc99830446fbb0d17ee339b7ba86fb45407d2040eaae7eb1c65468de50b7c9df1da898ee615792c223bf40fa476abd572feb8e69d1c6ad5b9f7b67e7da6bacd7d000b4f6ef444f6a04a62c3619b702b1247dc35fce66a26b8712501f8a5f120978020bd4cefd0b3c6daa8f8a2011d255ed2b4b88bb86a29ad5b9340c395425d2c73d79f67e40a1eca3e16c51d534a4241d3723cca001a218767a0a8c105c44a59a9d2507672b7b94a5b513a5ba6557528800495da9c355d2c15252ee2b687c4d52f6166be652c90c9934833f52e92f8dc227da4d9a05291353caa257d522820c5d14cc745a80377abdbb444fd9a62e1283eb684c71a982afa72ed327643f3672015aa0fbffae7f8b31427b658e636b3dce9a651a730eef695593a14e2f338a7457053913a0ec59fb86827b93b7944c57332473cf3773d222c61347c78f2268c9485293250e2af08bb3537d5bc620c74c135862e55eba3a52a52301445a1ee28a2d5ac1219a00bc90a4377e8cfa32320f84f046a6d83ba
+// }
