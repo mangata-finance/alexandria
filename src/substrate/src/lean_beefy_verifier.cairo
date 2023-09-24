@@ -143,7 +143,6 @@ fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt2
 	let mut offset: usize = 0;
 
 	let number_leaves: usize = compact_u32_decode(buffer, ref offset)?;
-		offset.print();
 
 	let mut hashes: Array<u256> = array![];
 	let mut itr: usize =0;
@@ -153,7 +152,7 @@ fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt2
 					Result::Ok(l)=> {l},
 					Result::Err(e) => {break Result::Err(e);}
 				};
-		offset.print(); leaf_length.print();
+
 		let hash_le: u256 = keccak(Slice{span: buffer, range: Range{start:offset, end: offset+leaf_length}});
 		let hash: u256 = u256_byte_reverse(hash_le);
 		hashes.append(hash);
@@ -227,7 +226,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 	let mmr_size: u64 = mmr_size_from_leaf_count(leaf_count);
 
 	let proof_items_be_u256 = hashes_to_u256s(proof_items)?;
-	
+		
 	let calculated_root_be_u256 = calculate_root(leaves.span(), mmr_size, proof_items_be_u256.span())?;
 
 	// Following would never fail due to previous len check
@@ -531,10 +530,12 @@ fn get_peaks(mmr_size: u64) -> Array<u64> {
     pos_s.append(pos);
     loop {
 		if !(height > 0){break;}
-        let (height, pos) = match get_right_peak(height, pos, mmr_size) {
+        let (h, p) = match get_right_peak(height, pos, mmr_size) {
             Option::Some(peak) => peak,
             Option::None => {break;},
         };
+		height = h;
+		pos =p;
         pos_s.append(pos);
     };
     pos_s
@@ -744,7 +745,6 @@ let maybe_err: Result<(),felt252> = loop{
 		Result::Ok(v)=>{v},
 		Result::Err(e)=>{
 			break Result::Err(e);
-			0_u32 //dummy value for the return type
 			}
 	};
     let beefy_payload_value_plan = Range{start: offset, end: offset+beefy_payload_value_len};
