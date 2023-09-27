@@ -21,6 +21,8 @@ use zeroable::Zeroable;
 use box::BoxTrait;
 
 
+// Possibly unsafe and insecure substrate storage proof verifier
+// DO NOT use in production - yet :)
 
 
 const VALIDATOR_ADDRESS_LEN: usize = 20;
@@ -28,6 +30,8 @@ const VALIDATOR_SIGNATURE_LEN: usize = 65;
 const BEEFY_FINALITY_PROOF_VERSION: u8= 1;
 const BEEFY_PAYLOAD_ID_LEN: usize =2;
 const HASH_LENGTH:usize = 32;
+
+const BEEFY_LEAF_DATA_VERSION: u8 = 0;
 
 const KECCAK_FULL_RATE_IN_U64S: usize = 17;
 const BYTES_IN_U64_WORD: usize = 8;
@@ -51,17 +55,26 @@ struct Leaf{
 }
 
 #[derive(Drop, Copy)]
-struct LeafWithHeight{
-    pos: u64,
-    hash: u256,
-	height: u32
-}
-
-#[derive(Drop, Copy)]
 struct BeefyPayloadEntryPlan<T>{
 	span: Span<T>,
     BeefyPayloadIdPlanStart: usize,
     BeefyPayloadValuePlan: Range,
+}
+
+#[derive(Drop, Copy)]
+struct BeefyData{
+	version: u8,
+    block_number: u32,
+    hash: u256,
+    leaf_extra: u256,
+	beefy_next_authority_set: BeefyAuthoritySet,
+}
+
+#[derive(Drop, Copy)]
+struct BeefyAuthoritySet {
+	id: u64,
+	len: u32,
+	keyset_commitment: u256,
 }
 
 impl PartialEqBeefyPayloadEntryPlan<T, impl TEq: PartialEq<T>> of PartialEq<BeefyPayloadEntryPlan<T>> {
@@ -137,6 +150,188 @@ impl PartialOrdBeefyPayloadEntryPlan<T, impl TPartialOrd: PartialOrd<T>, impl TC
 		};
 		gt
 	}
+}
+
+fn merkelize_for_merkle_root(hashed_leaves: Span<u256>) -> u256
+{
+	let mut next = match merkelize_row(hashed_leaves) {
+		Result::Ok(root) => {return root;},
+		Result::Err(next) => {
+			if next.is_empty() {
+				return 0_u256;
+			} else {
+				next
+			}
+		},
+	};
+
+	loop {
+
+		match merkelize_row(next.span()) {
+			Result::Ok(root) => {break root;},
+			Result::Err(t) => {
+				next = t;
+			},
+		};
+	}
+
+}
+
+fn merkelize_row(
+	mut row: Span<u256>,
+) -> Result<u256, Array<u256>>
+{
+	let mut next: Array<u256> = array![];
+	let mut itr: usize =0;
+
+	let res: Result<u256, ()> = loop {
+
+		let a = row.pop_front();
+		let b = row.pop_front();
+
+		if a.is_some() && b.is_some(){
+			let merge_hash_le: u256 = keccak_u256s_be_inputs(array![*a.expect('is_some checked'), *b.expect('is_some checked')].span());
+			let hash = u256_byte_reverse(merge_hash_le);
+
+			next.append(hash);
+		} 
+		else if a.is_some() && b.is_none(){
+			// Odd number of items. Promote the item to the upper layer.
+			if !next.is_empty() {next.append(*a.expect('is_some checked'));}
+			// Last item = root.
+			else{break Result::Ok(*a.expect('is_some checked'));};
+			}
+		else {
+			// Finish up, no more items.
+			break Result::Err(());
+		};
+	};
+
+	match res {
+		Result::Ok(o) => {Result::Ok(o)},
+		Result::Err(_) => {Result::Err(next)}
+	}
+
+}
+
+fn verify_proof(
+	root: u256,
+	proof: Span<u256>,
+	number_of_leaves: usize,
+	leaf_index: usize,
+	leaf_hash: u256,
+) -> bool
+{
+	if leaf_index >= number_of_leaves {
+		return false;
+	}
+
+	let mut itr: usize = 0;
+	let mut hash: u256 = leaf_hash;
+	let mut position = leaf_index;
+	let mut width = number_of_leaves;
+
+	loop{
+		if itr==proof.len(){break;}
+
+		if position % 2 == 1 || position + 1 == width {
+			let merge_hash_le: u256 = keccak_u256s_be_inputs(array![*proof.at(itr), hash].span());
+			hash = u256_byte_reverse(merge_hash_le);
+		} else {
+			let merge_hash_le: u256 = keccak_u256s_be_inputs(array![hash, *proof.at(itr)].span());
+			hash = u256_byte_reverse(merge_hash_le);
+		}
+
+		position /= 2;
+		width = ((width - 1) / 2) + 1;
+
+		itr=itr+1;
+	};
+
+	root == hash
+}
+
+fn encoded_leaf_to_leaf(buffer: Span<u8>) -> Result<BeefyData,felt252>{
+	let mut offset: usize = 0;
+
+	if buffer.len().is_zero(){
+		return Result::Err('null encoded leaf');
+	}
+
+	let leaf_data_version: u8 = *buffer.at(offset);
+	offset=offset+1;
+
+	if leaf_data_version != BEEFY_LEAF_DATA_VERSION{
+		return Result::Err('Bad beefy leaf data version');
+	}
+
+	let block_number: u32 = u32_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 4}});
+	offset=offset + 4;
+
+	let hash = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
+	offset=offset + HASH_LENGTH;
+
+	let leaf_extra = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
+	offset=offset + HASH_LENGTH;
+
+	let next_autority_set_id: u64 = u64_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 8}});
+	offset=offset + 8;
+
+	let next_autority_set_len: u32 = u32_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 4}});
+	offset=offset + 4;
+
+	let next_autority_set_commitment: u256 = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
+	offset=offset + HASH_LENGTH;
+
+	let beefy_next_authority_set: BeefyAuthoritySet = BeefyAuthoritySet {
+		id: next_autority_set_id,
+		len: next_autority_set_len,
+		keyset_commitment: next_autority_set_commitment,
+	};
+
+	let beefy_data: BeefyData =BeefyData{
+		version: leaf_data_version,
+		block_number: block_number,
+		hash: hash,
+		leaf_extra: leaf_extra,
+		beefy_next_authority_set: beefy_next_authority_set,
+	};
+
+	Result::Ok(beefy_data)
+}
+
+fn encoded_opaque_leaves_to_leaves(buffer: Span<u8>) -> Result<Array<BeefyData>,felt252>{
+	let mut offset: usize = 0;
+
+	let number_leaves: usize = compact_u32_decode(buffer, ref offset)?;
+
+	let mut leaves: Array<BeefyData> = array![];
+	let mut itr: usize =0;
+	let maybe_err: Result<(),felt252> = loop{
+		if itr == number_leaves{break Result::Ok(());}
+		let leaf_length = match compact_u32_decode(buffer, ref offset){
+					Result::Ok(l)=> {l},
+					Result::Err(e) => {break Result::Err(e);}
+				};
+
+		let leaf: BeefyData = match encoded_leaf_to_leaf(buffer.slice(offset, leaf_length)){
+					Result::Ok(l)=> {l},
+					Result::Err(e) => {break Result::Err(e);}
+				};
+		leaves.append(leaf);
+		offset = offset + leaf_length;
+		itr=itr+1;
+	};
+
+	match maybe_err {
+		Result::Ok(_) => {},
+		Result::Err(e) => {return Result::Err(e);}
+	};
+
+	if offset!=buffer.len(){
+		return Result::Err('offset not at buffer end');
+	}
+	Result::Ok(leaves)
 }
 
 fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt252>{

@@ -28,7 +28,8 @@ const NIBBLE_LENGTH: usize = 16;
 const HASH_LENGTH: usize = 32; // 256/8
 
 
-// Possibly unsafe and insecure substrate storage proof verifier 
+// Possibly unsafe and insecure substrate storage proof verifier
+// DO NOT use in production - yet :)
 
 
 #[derive(Copy, Drop)]
