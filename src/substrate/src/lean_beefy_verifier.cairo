@@ -61,7 +61,7 @@ struct BeefyPayloadEntryPlan<T>{
     BeefyPayloadValuePlan: Range,
 }
 
-#[derive(Drop, Copy)]
+#[derive(Drop, Copy, PartialEq, Debug)]
 struct BeefyData{
 	version: u8,
     block_number: u32,
@@ -70,7 +70,7 @@ struct BeefyData{
 	beefy_next_authority_set: BeefyAuthoritySet,
 }
 
-#[derive(Drop, Copy)]
+#[derive(Drop, Copy, PartialEq, Debug)]
 struct BeefyAuthoritySet {
 	id: u64,
 	len: u32,
@@ -214,7 +214,52 @@ fn merkelize_row(
 
 }
 
-fn verify_proof(
+fn get_hashes_from_items(buffer: Span<u8>, item_lengths: Span<usize>) -> Result<Array<u256>, felt252>{
+	
+	let item_lengths_len = item_lengths.len();
+	if item_lengths_len == 0{
+		return Result::Err('No items to hash');
+	}
+
+	let buffer_len = buffer.len();
+	if buffer_len == 0{
+		return Result::Err('No items to hash');
+	}
+
+	let mut offset: usize=0;
+	let mut hashes: Array<u256> = array![];
+	let mut itr: usize =0 ;
+
+	let maybe_err: Result<(), felt252> = loop{
+		if itr==item_lengths_len{break Result::Ok(());}
+		let item_len = *item_lengths.at(itr);
+
+		if offset + item_len > buffer_len{break Result::Err('offset beyond buffer len');}
+
+		let hash_le: u256 = keccak(Slice{span: buffer, range: Range{start:offset, end: offset+item_len}});
+		let hash: u256 = u256_byte_reverse(hash_le);
+
+		hashes.append(hash);
+
+		offset=offset+item_len;
+
+		itr=itr+1;
+	};
+
+	match maybe_err {
+		Result::Ok(_) => {},
+		Result::Err(e) => {return Result::Err(e);}
+	};
+
+	if buffer_len != offset{
+		return Result::Err('offset not at buffer end');
+	}
+
+	Result::Ok(hashes)
+
+}
+
+fn verify_merkle_proof(
 	root: u256,
 	proof: Span<u256>,
 	number_of_leaves: usize,
@@ -271,9 +316,6 @@ fn encoded_leaf_to_leaf(buffer: Span<u8>) -> Result<BeefyData,felt252>{
 	let hash = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
 	offset=offset + HASH_LENGTH;
 
-	let leaf_extra = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
-	offset=offset + HASH_LENGTH;
-
 	let next_autority_set_id: u64 = u64_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 8}});
 	offset=offset + 8;
 
@@ -281,6 +323,9 @@ fn encoded_leaf_to_leaf(buffer: Span<u8>) -> Result<BeefyData,felt252>{
 	offset=offset + 4;
 
 	let next_autority_set_commitment: u256 = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
+	offset=offset + HASH_LENGTH;
+
+	let leaf_extra = *hashes_to_u256s(buffer.slice(offset, HASH_LENGTH)).expect('Should u256').at(0);
 	offset=offset + HASH_LENGTH;
 
 	let beefy_next_authority_set: BeefyAuthoritySet = BeefyAuthoritySet {
