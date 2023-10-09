@@ -6,14 +6,59 @@ use debug::PrintTrait;
 use result::ResultTrait;
 use core::clone::Clone;
 
+
+
+use starknet::secp256_trait::{
+    Signature, recover_public_key, verify_eth_signature, Secp256PointTrait, signature_from_vrs
+};
+use starknet::{eth_address::U256IntoEthAddress, EthAddress};
+use integer::u256;
+use starknet::secp256k1::{Secp256k1Point, Secp256k1PointImpl};
+
+#[test]
+#[available_gas(20000000000)]
+fn custom_test() {
+    {
+        let pre_hashed_message = u256{ low:0x5ad896dbb14e39c1fecaff6ae02bbb50 
+
+        ,high: 0xcee2819ce46ce268649072040ce1b33e} ;
+
+        let v:u32 = 0x1;
+
+        let r_high = 0x755a50112e6b29bbcabffd3fce5d7f1 ;
+
+        let r_low = 0x10bc0ac7193b081b1fe25b885136414f ;
+
+        // let r = u256{high: r_high, low: r_low};
+
+        let s_high = 0x184d3f82b94a53eb15f889253c7b685d ;
+
+        let s_low = 0xab08356867af8d581689c8b4c1ac9b3c ;
+
+        // let s = u256{high: s_high, low: s_low};
+
+        let a_high = 0xe04cc55e ;
+
+        let a_low = 0xbee1cbce552f250e85c57b70b2e2625b;
+
+        // let a = u256{high: a_high, low: a_low};
+
+        let eth_signature = signature_from_vrs(v, u256{high: r_high, low: r_low }, u256{high:s_high, low:s_low});
+
+        verify_eth_signature::<Secp256k1Point>(pre_hashed_message, eth_signature, Into::<u256, EthAddress>::into(u256{high:a_high, low:a_low}));
+    }
+
+}
+
 #[test]
 #[available_gas(20000000000)]
 fn test_lean_beefy_proof_verification() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof().span(), get_current_validator_addresses().span(), ArrayTrait::<u8>::new().span(), 3, 39);
     let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
-        Result::Ok(beefy_payloads)=>{
+        Result::Ok(beefy_res)=>{
+            let (_,beefy_payloads) =beefy_res;
             get_mmr_root(beefy_payloads.span())},
-        Result::Err(e)=>{e.print(); Result::Err('Dummy return')},
+        Result::Err(e)=>{e.print(); assert(false, 'beefy ver failed');Result::Err('Dummy return')},
     };
     // panic(convert_u8_array_to_felt252_array(maybe_mmr_root.unwrap()));
     match maybe_mmr_root{
@@ -58,9 +103,10 @@ fn get_current_validator_addresses() -> Array<u8> {
 fn test_lean_beefy_proof_verification_2() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof_2().span(), get_current_validator_addresses_2().span(), ArrayTrait::<u8>::new().span(), 7, 79);
     let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
-        Result::Ok(beefy_payloads)=>{
+        Result::Ok(beefy_res)=>{
+            let (_,beefy_payloads) =beefy_res;
             get_mmr_root(beefy_payloads.span())},
-        Result::Err(e)=>{e.print(); Result::Err('Dummy return')},
+        Result::Err(e)=>{e.print(); assert(false, 'beefy ver failed'); Result::Err('Dummy return')},
     };
 
     match maybe_mmr_root{
