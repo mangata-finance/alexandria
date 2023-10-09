@@ -80,9 +80,18 @@ struct BeefyAuthoritySet {
 struct BeefyProofInfo {
 	block_number: u32,
 	validator_set_id: u64,
-	is_next_validator_set_id: bool,
-	is_validator_chain_broken: bool,
 	is_proof_verification_completed: bool,
+}
+
+#[derive(Drop, Copy)]
+struct BeefyProofMetadata {
+	buffer: Span<u8>,
+	commitment_pre_hashed: u256,
+	signatures_from_bitfield: Slice<u8>,
+	signatures_compact: Slice<u8>,
+	signatures_compact_start:usize,
+	signatures_compact_len: u32,
+	validator_set_len: u32
 }
 
 
@@ -966,7 +975,7 @@ fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Result<Span<
 
 // We need to also add next validator set here to the input for when the validator set changes and we need to use the next selector
 // Ideally this won't be inputs as such, just accessors
-fn verify_lean_beefy_proof_with_validator_set(buffer: Span<u8>, current_validator_addresses: Span<u8>, next_validator_addresses: Span<u8>, expected_validator_set_id: u64, last_block_number: u32) -> Result<(BeefyProofInfo, Array<BeefyPayloadEntryPlan<u8>>),felt252>{
+fn verify_lean_beefy_proof_with_validator_set(buffer: Span<u8>, current_validator_addresses: Span<u8>, next_validator_addresses: Span<u8>, expected_validator_set_id: u64, last_block_number: u32) -> Result<(BeefyProofMetadata, BeefyProofInfo, Array<BeefyPayloadEntryPlan<u8>>),felt252>{
 
 let mut offset:usize = 0;
 
@@ -1026,20 +1035,20 @@ commitment.range.end.print();
 let commitment_pre_hashed_le = keccak(commitment);
 let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
-let mut validator_addresses = current_validator_addresses;
-let mut is_next_validator_set_id: bool = false;
-let mut is_validator_chain_broken: bool = false;
+// let mut validator_addresses = current_validator_addresses;
+// let mut is_next_validator_set_id: bool = false;
+// let mut is_validator_chain_broken: bool = false;
 
-if validator_set_id!=expected_validator_set_id{
-	if validator_set_id==expected_validator_set_id+1{
-		is_next_validator_set_id =true;
-		validator_addresses = next_validator_addresses
-	} else if validator_set_id<expected_validator_set_id{
-    	return Result::Err('Too low validator set id');
-	} else {
-    	is_validator_chain_broken = true;
-	}
-}
+// if validator_set_id!=expected_validator_set_id{
+// 	if validator_set_id==expected_validator_set_id+1{
+// 		is_next_validator_set_id =true;
+// 		validator_addresses = next_validator_addresses
+// 	} else if validator_set_id<expected_validator_set_id{
+//     	return Result::Err('Too low validator set id');
+// 	} else {
+//     	is_validator_chain_broken = true;
+// 	}
+// }
 
 let signatures_from_bitfield_len = compact_u32_decode(buffer, ref offset)?;
 let signatures_from_bitfield = Slice{span: buffer, range: Range{start: offset, end: offset+signatures_from_bitfield_len}};
@@ -1048,16 +1057,9 @@ offset=offset+signatures_from_bitfield_len;
 signatures_from_bitfield.range.start.print();
 signatures_from_bitfield.range.end.print();
 
-let validator_addresses_len:usize = validator_addresses.len();
-let number_of_validators:usize = validator_addresses_len/VALIDATOR_ADDRESS_LEN;
-assert(number_of_validators*VALIDATOR_ADDRESS_LEN==validator_addresses_len, 'bad validator_addresses len');
-
 let validator_set_len = u32_decode(Slice{span: buffer, range:Range {start: offset, end: offset + 4}});
 offset=offset + 4;
 
-if validator_set_len!=number_of_validators{
-    return Result::Err('validator_set_len mismatch');
-}
 
 let signatures_compact_len = compact_u32_decode(buffer, ref offset)?;
 let signatures_compact = Slice{span: buffer, range: Range{start: offset, end: offset+(signatures_compact_len*VALIDATOR_SIGNATURE_LEN)}};
@@ -1067,13 +1069,33 @@ offset=offset+(signatures_compact_len*VALIDATOR_SIGNATURE_LEN);
 signatures_compact.range.start.print();
 signatures_compact.range.end.print();
 
+// TODO
+// Add to caller
+// if itr>=threshold(validator_addresses_len){
+//     return Result::Err('Not enough sigs');
+// }
+
+//TODO
+//Remove
+let validator_addresses=current_validator_addresses;
+
+let validator_addresses_len:usize = validator_addresses.len();
+let number_of_validators:usize = validator_addresses_len/VALIDATOR_ADDRESS_LEN;
+assert(number_of_validators*VALIDATOR_ADDRESS_LEN==validator_addresses_len, 'bad validator_addresses len');
+
+
+if validator_set_len!=number_of_validators{
+    return Result::Err('validator_set_len mismatch');
+}
+
+
 let mut bitfield_byte_bit_selector:u8=128;
 let mut bitfield_byte_pointer: usize=signatures_from_bitfield.range.start;
 let mut validator_count:usize=0;
 let mut bitfield_byte_offset=0;
-itr =0;
+let mut itr =0;
 let maybe_err: Result<(),felt252> = loop{
-    if itr ==signatures_compact_len{
+	if itr ==signatures_compact_len{
 
 		if bitfield_byte_pointer == signatures_from_bitfield.range.end{
 			if bitfield_byte_bit_selector==128{
@@ -1146,7 +1168,7 @@ let maybe_err: Result<(),felt252> = loop{
 				}
 
 				if *signatures_from_bitfield.span.at(bitfield_byte_pointer) != 0_u8{
-					all_following_bits_in_byte_are_zero = true;
+					all_following_bitfield_bytes_are_zero = false;
 				}
 				trailing_zero_count=trailing_zero_count+8;
 
@@ -1166,16 +1188,16 @@ let maybe_err: Result<(),felt252> = loop{
 			}
 
 			if all_following_bitfield_bytes_are_zero != true{
-				break Result::Err('Bitfield did not terminate');
+				break Result::Err('Bitfield non-zero after last');
 			}
 
 		} else {
 			break Result::Err('Bitfield incorrectly terminated');
 		}
 
-        break Result::Ok(());
-    }
-    
+		break Result::Ok(());
+	}
+	
 	match move_over_zeros(signatures_from_bitfield, ref bitfield_byte_pointer, ref bitfield_byte_bit_selector, ref validator_count){
 		Result::Ok(())=>{},
 		Result::Err(e)=>{break Result::Err(e);}
@@ -1206,17 +1228,13 @@ let maybe_err: Result<(),felt252> = loop{
 
 	inc_bitfield_marker_unchecked(signatures_from_bitfield, ref bitfield_byte_pointer, ref bitfield_byte_bit_selector, ref validator_count);
 
-    itr=itr+1;
+	itr=itr+1;
 };
 
 match maybe_err{
 	Result::Ok(())=>{},
 	Result::Err(e)=>{return Result::Err(e);}
 };
-
-if itr>=threshold(validator_addresses_len){
-    return Result::Err('Not enough sigs');
-}
 
 if offset!=buffer.len(){
     return Result::Err('offset not at buffer end');
@@ -1225,12 +1243,178 @@ if offset!=buffer.len(){
 let beefy_proof_info = BeefyProofInfo {
 	block_number: block_number,
 	validator_set_id: validator_set_id,
-	is_next_validator_set_id: is_next_validator_set_id,
-	is_validator_chain_broken: is_validator_chain_broken,
 	is_proof_verification_completed: true,
 };
 
-Result::Ok((beefy_proof_info, beefy_payloads))
+let beefy_proof_metadata = BeefyProofMetadata{
+	buffer: buffer, commitment_pre_hashed: commitment_pre_hashed,signatures_from_bitfield: signatures_from_bitfield, signatures_compact: signatures_compact, signatures_compact_start:signatures_compact_start, signatures_compact_len: signatures_compact_len, validator_set_len: validator_set_len
+};
+
+Result::Ok((beefy_proof_metadata, beefy_proof_info, beefy_payloads))
+}
+
+fn verify_beefy_signatures(buffer: Span<u8>, commitment_pre_hashed: u256,signatures_from_bitfield: Slice<u8>, signatures_compact: Slice<u8>, signatures_compact_start:usize, signatures_compact_len: u32, validator_set_len: u32, validator_addresses: Span<u8>)
+-> Result<bool, felt252>{
+
+let validator_addresses_len:usize = validator_addresses.len();
+let number_of_validators:usize = validator_addresses_len/VALIDATOR_ADDRESS_LEN;
+assert(number_of_validators*VALIDATOR_ADDRESS_LEN==validator_addresses_len, 'bad validator_addresses len');
+
+
+if validator_set_len!=number_of_validators{
+    return Result::Err('validator_set_len mismatch');
+}
+
+
+	let mut bitfield_byte_bit_selector:u8=128;
+	let mut bitfield_byte_pointer: usize=signatures_from_bitfield.range.start;
+	let mut validator_count:usize=0;
+	let mut bitfield_byte_offset=0;
+	let mut itr =0;
+	let maybe_err: Result<(),felt252> = loop{
+		if itr ==signatures_compact_len{
+
+			if bitfield_byte_pointer == signatures_from_bitfield.range.end{
+				if bitfield_byte_bit_selector==128{
+					if validator_count != validator_set_len{
+						break Result::Err('Unexpected bitfield error');
+					}
+				} else {
+					break Result::Err('Bitfield incorrectly terminated');
+				}
+			} else if bitfield_byte_pointer < signatures_from_bitfield.range.end{
+				if validator_count > validator_set_len{
+					break Result::Err('Unexpected bitfield error 2');
+				}
+				
+				let mut trailing_zero_count = 0;
+				// all in current byte from selector are 0
+				let mut all_following_bits_in_byte_are_zero: bool = true;
+				if bitfield_byte_bit_selector == 128{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 255_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+8;
+				} else if bitfield_byte_bit_selector == 64{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 127_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+7;
+				} else if bitfield_byte_bit_selector == 32{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 63_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+6;
+				} else if bitfield_byte_bit_selector == 16{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 31_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+5;
+				} else if bitfield_byte_bit_selector == 8{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 15_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+4;
+				} else if bitfield_byte_bit_selector == 4{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 7_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+3;
+				} else if bitfield_byte_bit_selector == 2{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 3_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+2;
+				} else if bitfield_byte_bit_selector == 1{
+					if (*signatures_from_bitfield.span.at(bitfield_byte_pointer) & 1_u8) != 0{
+						all_following_bits_in_byte_are_zero = false;
+					}
+						trailing_zero_count=trailing_zero_count+1;
+				}
+
+				if all_following_bits_in_byte_are_zero != true{
+					break Result::Err('Bitfield did not terminate');
+				}
+
+				bitfield_byte_pointer = bitfield_byte_pointer + 1;
+
+				let mut all_following_bitfield_bytes_are_zero: bool = true;
+				loop{
+					if bitfield_byte_pointer == signatures_from_bitfield.range.end{
+						break;
+					}
+
+					if *signatures_from_bitfield.span.at(bitfield_byte_pointer) != 0_u8{
+						all_following_bitfield_bytes_are_zero = false;
+					}
+					trailing_zero_count=trailing_zero_count+8;
+
+					bitfield_byte_pointer= bitfield_byte_pointer + 1;
+				};
+
+				if (trailing_zero_count+validator_count) < validator_set_len{
+					break Result::Err('Unexpected bitfield error 3');
+				}
+
+				if (trailing_zero_count+validator_count) < 8{
+					break Result::Err('Unexpected bitfield error 4');
+				}
+
+				if (trailing_zero_count+validator_count - 8) > validator_set_len{
+					break Result::Err('Unexpected bitfield error 5');
+				}
+
+				if all_following_bitfield_bytes_are_zero != true{
+					break Result::Err('Bitfield non-zero after last');
+				}
+
+			} else {
+				break Result::Err('Bitfield incorrectly terminated');
+			}
+
+			break Result::Ok(());
+		}
+		
+		match move_over_zeros(signatures_from_bitfield, ref bitfield_byte_pointer, ref bitfield_byte_bit_selector, ref validator_count){
+			Result::Ok(())=>{},
+			Result::Err(e)=>{break Result::Err(e);}
+		};
+
+		// DEBUG!!!
+		// FOR BENCHMARKING!!!
+		// TODO
+		// REMOVE!!
+		// let mut asdf:usize=0;
+		// loop{
+		// 	if asdf==2{break;}
+		if !verify_eth_signature_pre_hashed(
+				commitment_pre_hashed,
+				Slice{span: buffer, range: Range{start: itr*VALIDATOR_SIGNATURE_LEN + signatures_compact_start,end: ((itr*VALIDATOR_SIGNATURE_LEN) + VALIDATOR_SIGNATURE_LEN + signatures_compact_start)}},
+				Slice{span: validator_addresses, range: Range{start: validator_count*VALIDATOR_ADDRESS_LEN,end: ((validator_count*VALIDATOR_ADDRESS_LEN) + VALIDATOR_ADDRESS_LEN)}},
+				)
+				{
+					// DEBUG!!!
+					// FOR BENCHMARKING!!!
+					// TODO
+					// UNOD!!
+			break Result::Err('Signature verification failed');
+			// assert(false, 'Signature verification failed');
+		}
+		// asdf=asdf+1;
+		// };
+
+		inc_bitfield_marker_unchecked(signatures_from_bitfield, ref bitfield_byte_pointer, ref bitfield_byte_bit_selector, ref validator_count);
+
+		itr=itr+1;
+	};
+
+	match maybe_err{
+		Result::Ok(())=>{},
+		Result::Err(e)=>{return Result::Err(e);}
+	};
+
+	Result::Ok(true)
+
 }
 
 fn move_over_zeros(bitfield: Slice<u8>, ref bitfield_byte_pointer: usize, ref selector:u8, ref validator_count: usize) -> Result<(),felt252>{

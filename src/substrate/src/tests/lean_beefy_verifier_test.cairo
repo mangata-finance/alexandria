@@ -1,5 +1,5 @@
 use array::{ArrayTrait, SpanTrait};
-use alexandria_substrate::lean_beefy_verifier::{BeefyData, BeefyAuthoritySet, encoded_opaque_leaves_to_leaves, verify_merkle_proof, hashes_to_u256s, merkelize_for_merkle_root, get_hashes_from_items,verify_mmr_leaves_proof,encoded_opaque_leaves_to_hashes,get_mmr_root, verify_lean_beefy_proof_with_validator_set, u256_byte_reverse, keccak, Slice, Range, verify_eth_signature_pre_hashed};
+use alexandria_substrate::lean_beefy_verifier::{verify_beefy_signatures, BeefyData, BeefyAuthoritySet, encoded_opaque_leaves_to_leaves, verify_merkle_proof, hashes_to_u256s, merkelize_for_merkle_root, get_hashes_from_items,verify_mmr_leaves_proof,encoded_opaque_leaves_to_hashes,get_mmr_root, verify_lean_beefy_proof_with_validator_set, u256_byte_reverse, keccak, Slice, Range, verify_eth_signature_pre_hashed};
 use alexandria_substrate::substrate_storage_read_proof_verifier::{convert_u8_subarray_to_u8_array, u8_array_eq};
 use alexandria_substrate::blake2b::convert_u8_array_to_felt252_array;
 use debug::PrintTrait;
@@ -56,7 +56,17 @@ fn test_lean_beefy_proof_verification() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof().span(), get_current_validator_addresses().span(), ArrayTrait::<u8>::new().span(), 3, 39);
     let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
         Result::Ok(beefy_res)=>{
-            let (_,beefy_payloads) =beefy_res;
+            let (beefy_proof_metadata,_,beefy_payloads) =beefy_res;
+            assert(verify_beefy_signatures(
+                beefy_proof_metadata.buffer,
+                beefy_proof_metadata.commitment_pre_hashed,
+                beefy_proof_metadata.signatures_from_bitfield,
+                beefy_proof_metadata.signatures_compact,
+                beefy_proof_metadata.signatures_compact_start,
+                beefy_proof_metadata.signatures_compact_len,
+                beefy_proof_metadata.validator_set_len,
+                get_current_validator_addresses().span()
+            ).expect('verify_beefy_signatures err'), 'verify_beefy_signatures failed');
             get_mmr_root(beefy_payloads.span())},
         Result::Err(e)=>{e.print(); assert(false, 'beefy ver failed');Result::Err('Dummy return')},
     };
@@ -104,7 +114,17 @@ fn test_lean_beefy_proof_verification_2() {
     let res = verify_lean_beefy_proof_with_validator_set(get_lean_beefy_proof_2().span(), get_current_validator_addresses_2().span(), ArrayTrait::<u8>::new().span(), 7, 79);
     let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
         Result::Ok(beefy_res)=>{
-            let (_,beefy_payloads) =beefy_res;
+            let (beefy_proof_metadata,_,beefy_payloads) =beefy_res;
+            // assert(verify_beefy_signatures(
+            //     beefy_proof_metadata.buffer,
+            //     beefy_proof_metadata.commitment_pre_hashed,
+            //     beefy_proof_metadata.signatures_from_bitfield,
+            //     beefy_proof_metadata.signatures_compact,
+            //     beefy_proof_metadata.signatures_compact_start,
+            //     beefy_proof_metadata.signatures_compact_len,
+            //     beefy_proof_metadata.validator_set_len,
+            //     get_current_validator_addresses().span()
+            // ).expect('verify_beefy_signatures err'), 'verify_beefy_signatures failed');
             get_mmr_root(beefy_payloads.span())},
         Result::Err(e)=>{e.print(); assert(false, 'beefy ver failed'); Result::Err('Dummy return')},
     };
