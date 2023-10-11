@@ -168,6 +168,19 @@ impl PartialOrdBeefyPayloadEntryPlan<T, impl TPartialOrd: PartialOrd<T>, impl TC
 	}
 }
 
+fn decode_paradata(para_data: Span<u8>) -> (u32, Span<u8>){
+	assert(para_data.len()>=5, 'bad para_data len');
+	let mut offset:usize=0;
+
+	let para_id = u32_decode(Slice{span: para_data, range: Range{start: offset, end:offset+4}});
+	offset=offset+4;
+
+	let para_head_len = compact_u32_decode(para_data, ref offset).expect('para_head_len decodes');
+	assert((offset+para_head_len) == para_data.len(), 'offset not at para_data end');
+	(para_id, para_data.slice(offset, para_head_len))
+
+}
+
 fn merkelize_for_merkle_root(hashed_leaves: Span<u256>) -> u256
 {
 	let mut next = match merkelize_row(hashed_leaves) {
@@ -252,7 +265,7 @@ fn get_hashes_from_items(buffer: Span<u8>, item_lengths: Span<usize>) -> Result<
 
 		if offset + item_len > buffer_len{break Result::Err('offset beyond buffer len');}
 
-		let hash_le: u256 = keccak(Slice{span: buffer, range: Range{start:offset, end: offset+item_len}});
+		let hash_le: u256 = keccak_le(Slice{span: buffer, range: Range{start:offset, end: offset+item_len}});
 		let hash: u256 = u256_byte_reverse(hash_le);
 
 		hashes.append(hash);
@@ -409,7 +422,7 @@ fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt2
 					Result::Err(e) => {break Result::Err(e);}
 				};
 
-		let hash_le: u256 = keccak(Slice{span: buffer, range: Range{start:offset, end: offset+leaf_length}});
+		let hash_le: u256 = keccak_le(Slice{span: buffer, range: Range{start:offset, end: offset+leaf_length}});
 		let hash: u256 = u256_byte_reverse(hash_le);
 		hashes.append(hash);
 		offset = offset + leaf_length;
@@ -428,11 +441,7 @@ fn encoded_opaque_leaves_to_hashes(buffer: Span<u8>) -> Result<Array<u256>,felt2
 }
 
 // The hashes in leaves_hashes must be BE
-fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>, leaves_hashes_be_u256s: Span<u256>) -> Result<(),felt252>{
-
-	if mmr_root.len() != HASH_LENGTH{
-		return Result::Err('mmr_root wrong len');
-	}
+fn verify_mmr_leaves_proof(mmr_root:u256, encoded_mmr_leaves_proof: Span<u8>, leaves_hashes_be_u256s: Span<u256>) -> Result<(),felt252>{
 
 	let leaves_hashes_len:usize = leaves_hashes_be_u256s.len();
 
@@ -485,10 +494,7 @@ fn verify_mmr_leaves_proof(mmr_root:Span<u8>, encoded_mmr_leaves_proof: Span<u8>
 		
 	let calculated_root_be_u256 = calculate_root(leaves.span(), mmr_size, proof_items_be_u256.span())?;
 
-	// Following would never fail due to previous len check
-	let mmr_root_be_u256 = *hashes_to_u256s(mmr_root)?.at(0);
-
-	if mmr_root_be_u256 == calculated_root_be_u256 {
+	if mmr_root == calculated_root_be_u256 {
 		return Result::Ok(());
 	} else {
 		return Result::Err('Mmr root mismatch');
@@ -723,6 +729,38 @@ fn calculate_root(leaves: Span<Leaf>, mmr_size: u64, proof_items: Span<u256>) ->
 	// Result::Err('Debug')
 }
 
+fn u8_eth_addresses_to_u256(u8_addresses: Span<u8>) -> Array<u256>{
+	let number_of_validators = u8_addresses.len()/VALIDATOR_ADDRESS_LEN;
+	assert(number_of_validators*VALIDATOR_ADDRESS_LEN==u8_addresses.len(), 'bad validator_addresses len');
+
+	let mut u256_addresses: Array<u256> = array![];
+
+	let mut itr: usize =0;
+	loop{
+		if itr==number_of_validators{break;}
+
+		let mut a_low:u128 = 0;
+		let mut vitr: usize =0;
+
+		loop{
+			if vitr==16{
+				break;
+			}
+
+			a_low = Into::<u8,u128>::into(*u8_addresses.at(4+vitr+itr*VALIDATOR_ADDRESS_LEN)) + a_low*256_u128;
+
+			vitr=vitr+1;
+		};
+
+		let a_high: u128 = Into::<u8,u128>::into(*u8_addresses.at(3+itr*VALIDATOR_ADDRESS_LEN)) + ((Into::<u8,u128>::into(*u8_addresses.at(2+itr*VALIDATOR_ADDRESS_LEN)) + ((Into::<u8,u128>::into(*u8_addresses.at(1+itr*VALIDATOR_ADDRESS_LEN)) + (Into::<u8,u128>::into(*u8_addresses.at(0+itr*VALIDATOR_ADDRESS_LEN)) * 256_u128)) *256_u128)) * 256_u128);
+
+		u256_addresses.append(u256{high:a_high, low:a_low});
+		itr=itr+1;
+	};
+	u256_addresses
+}
+
+// Should not return a result, should just panic on bad len
 fn hashes_to_u256s(hashes: Span<u8>) -> Result<Array<u256>, felt252>{
 	let hashes_len: usize = hashes.len()/HASH_LENGTH;
 	if (hashes_len*HASH_LENGTH) != hashes.len(){
@@ -948,7 +986,7 @@ fn get_mmr_root_payload_id() -> Span<u8> {
 	array![109_u8, 104_u8].span()
 }
 
-fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Result<Span<u8>, felt252>{
+fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Result<u256, felt252>{
 	if beefy_payloads.is_empty(){
 		return Result::Err('beefy_payloads is empty');
 	}
@@ -962,7 +1000,7 @@ fn get_mmr_root(beefy_payloads: Span<BeefyPayloadEntryPlan<u8>>) -> Result<Span<
 			let beefy_payload: BeefyPayloadEntryPlan<u8> = *beefy_payloads.at(index);
 			let beefy_payload_value_len:usize = beefy_payload.BeefyPayloadValuePlan.end - beefy_payload.BeefyPayloadValuePlan.start;
 			if beefy_payload_value_len == HASH_LENGTH{
-				return Result::Ok(beefy_payload.span.slice(beefy_payload.BeefyPayloadValuePlan.start, beefy_payload_value_len));
+				return Result::Ok(*hashes_to_u256s(beefy_payload.span.slice(beefy_payload.BeefyPayloadValuePlan.start, beefy_payload_value_len)).expect('hashes_to_u256s works').at(0));
 			} else {
 				return Result::Err('mmr_root not 32 bytes long');
 			}
@@ -1030,7 +1068,7 @@ let commitment = Slice{span: buffer, range: Range{start:commitment_start, end:co
 // commitment.range.start.print();
 // commitment.range.end.print();
 
-let commitment_pre_hashed_le = keccak(commitment);
+let commitment_pre_hashed_le = keccak_le(commitment);
 let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
 // let mut validator_addresses = current_validator_addresses;
@@ -1233,10 +1271,9 @@ offset=offset+(signatures_compact_len*VALIDATOR_SIGNATURE_LEN);
 // 	Result::Err(e)=>{return Result::Err(e);}
 // };
 
-
-	if signatures_compact_len>=threshold(validator_set_len){
-	    return Result::Err('Not enough sigs');
-	}
+if signatures_compact_len<threshold(validator_set_len){
+	return Result::Err('Not enough sigs');
+}
 
 if offset!=buffer.len(){
     return Result::Err('offset not at buffer end');
@@ -1259,21 +1296,20 @@ let beefy_proof_metadata = BeefyProofMetadata{
 Result::Ok((beefy_proof_metadata, beefy_proof_info, beefy_payloads))
 }
 
-fn verify_beefy_signatures(commitment_pre_hashed: u256,signatures_from_bitfield: Span<u8>, validator_set_len: u32, signatures_compact_len: u32, signatures_compact: Span<u8>, validator_addresses: Span<u8>)
+fn verify_beefy_signatures(limit: Option<usize>, commitment_pre_hashed: u256,signatures_from_bitfield: Span<u8>, validator_set_len: u32, signatures_compact_len: u32, signatures_compact: Span<u8>, validator_addresses: Span<u256>)
 -> Result<bool, felt252>{
-
-let validator_addresses_len:usize = validator_addresses.len();
-let number_of_validators:usize = validator_addresses_len/VALIDATOR_ADDRESS_LEN;
-assert(number_of_validators*VALIDATOR_ADDRESS_LEN==validator_addresses_len, 'bad validator_addresses len');
 
 let provided_signatures_compact_len = signatures_compact.len()/VALIDATOR_SIGNATURE_LEN;
 assert(provided_signatures_compact_len*VALIDATOR_SIGNATURE_LEN==signatures_compact.len(), 'bad signatures_compact len');
 assert(signatures_compact_len==provided_signatures_compact_len, 'signatures_compact len mismatch');
 
 
-if validator_set_len!=number_of_validators{
+if validator_set_len!=validator_addresses.len(){
     return Result::Err('validator_set_len mismatch');
 }
+
+
+	let mut should_ver: bool = true;
 
 	let mut signatures_from_bitfield_len:usize = signatures_from_bitfield.len();
 	let mut bitfield_byte_bit_selector:u8=128;
@@ -1397,19 +1433,30 @@ if validator_set_len!=number_of_validators{
 		// let mut asdf:usize=0;
 		// loop{
 		// 	if asdf==2{break;}
-		if !verify_eth_signature_pre_hashed(
-				commitment_pre_hashed,
-				signatures_compact.slice(itr*VALIDATOR_SIGNATURE_LEN, VALIDATOR_SIGNATURE_LEN),
-				validator_addresses.slice(validator_count*VALIDATOR_ADDRESS_LEN, VALIDATOR_ADDRESS_LEN),
-				)
-				{
-					// DEBUG!!!
-					// FOR BENCHMARKING!!!
-					// TODO
-					// UNOD!!
-			break Result::Err('Signature verification failed');
-			// assert(false, 'Signature verification failed');
+
+		if should_ver && limit.is_some() {
+			let limit = limit.expect('is_some checked');
+			if itr>=limit{
+				should_ver=false;
+			}
 		}
+
+		if should_ver{
+			if !verify_eth_signature_pre_hashed_u256_address(
+					commitment_pre_hashed,
+					signatures_compact.slice(itr*VALIDATOR_SIGNATURE_LEN, VALIDATOR_SIGNATURE_LEN),
+					*validator_addresses.at(validator_count),
+					)
+					{
+						// DEBUG!!!
+						// FOR BENCHMARKING!!!
+						// TODO
+						// UNOD!!
+				break Result::Err('Signature verification failed');
+				// assert(false, 'Signature verification failed');
+			}
+		};
+		
 		// asdf=asdf+1;
 		// };
 
@@ -1465,7 +1512,7 @@ fn inc_bitfield_marker_unchecked(bitfield: Span<u8>, ref bitfield_byte_pointer: 
 }
 
 // returns le encoded output
-fn keccak(input: Slice<u8>) -> u256{
+fn keccak_le(input: Slice<u8>) -> u256{
 
 	let len: usize = input.range.end-input.range.start;
 	let number_of_full_u64_words = len/8;
@@ -1512,49 +1559,10 @@ fn keccak(input: Slice<u8>) -> u256{
 }
 
 fn verify_eth_signature_pre_hashed(pre_hashed_message: u256, signature: Span<u8>, address: Span<u8>) -> bool{
-	let mut r_high:u128 = 0;
-	let mut r_low:u128 = 0;
-	let mut s_high:u128 = 0;
-	let mut s_low:u128 = 0;
-	let mut a_low:u128 = 0;
-	assert(signature.len()==65, 'Bad signature len');
+
 	assert(address.len()==20, 'Bad address len');
-
-	let mut itr: usize = 0;
-	
-
-	loop{
-		if itr==16{
-			break;
-		}
-
-		r_high = Into::<u8,u128>::into(*signature.at(itr)) + r_high*256_u128;
-		r_low = Into::<u8,u128>::into(*signature.at(16+itr)) + r_low*256_u128;
-
-		s_high = Into::<u8,u128>::into(*signature.at(32+itr)) + s_high*256_u128;
-		s_low = Into::<u8,u128>::into(*signature.at(48+itr)) + s_low*256_u128;
-
-		a_low = Into::<u8,u128>::into(*address.at(4+itr)) + a_low*256_u128;
-
-		itr=itr+1;
-	};
-
-	let a_high: u128 = Into::<u8,u128>::into(*address.at(3)) + ((Into::<u8,u128>::into(*address.at(2)) + ((Into::<u8,u128>::into(*address.at(1)) + (Into::<u8,u128>::into(*address.at(0)) * 256_u128)) *256_u128)) * 256_u128);
-
-	let v:u32 = Into::<u8,u32>::into(*signature.at(64));
-
-	let eth_signature = signature_from_vrs(v, u256{high: r_high, low: r_low }, u256{high:s_high, low:s_low});
-	// let eth_signature = Signature { r:u256{high: r_high, low: r_low }, s:u256{high:s_high, low:s_low}, y_parity: v % 2 != 1,  };
-	// pre_hashed_message.print();
-	// v.print();
-	// r_high.print();
-	// r_low.print();
-	// s_high.print();
-	// s_low.print();
-	// a_high.print();
-	// a_low.print();
-	verify_eth_signature::<Secp256k1Point>(pre_hashed_message, eth_signature, Into::<u256, EthAddress>::into(u256{high:a_high, low:a_low}));
-	true
+	let address_u256: u256 = *u8_eth_addresses_to_u256(address).at(0);
+	verify_eth_signature_pre_hashed_u256_address(pre_hashed_message, signature, address_u256)
 }
 
 fn verify_eth_signature_pre_hashed_u256_address(pre_hashed_message: u256, signature: Span<u8>, address: u256) -> bool{
@@ -1578,7 +1586,6 @@ fn verify_eth_signature_pre_hashed_u256_address(pre_hashed_message: u256, signat
 
 		s_high = Into::<u8,u128>::into(*signature.at(32+itr)) + s_high*256_u128;
 		s_low = Into::<u8,u128>::into(*signature.at(48+itr)) + s_low*256_u128;
-
 
 		itr=itr+1;
 	};

@@ -1,5 +1,5 @@
 use array::{ArrayTrait, SpanTrait};
-use alexandria_substrate::lean_beefy_verifier::{verify_beefy_signatures, BeefyData, BeefyAuthoritySet, encoded_opaque_leaves_to_leaves, verify_merkle_proof, hashes_to_u256s, merkelize_for_merkle_root, get_hashes_from_items,verify_mmr_leaves_proof,encoded_opaque_leaves_to_hashes,get_mmr_root, get_lean_beefy_proof_metadata, u256_byte_reverse, keccak, Slice, Range, verify_eth_signature_pre_hashed};
+use alexandria_substrate::lean_beefy_verifier::{u8_eth_addresses_to_u256,verify_beefy_signatures, BeefyData, BeefyAuthoritySet, encoded_opaque_leaves_to_leaves, verify_merkle_proof, hashes_to_u256s, merkelize_for_merkle_root, get_hashes_from_items,verify_mmr_leaves_proof,encoded_opaque_leaves_to_hashes,get_mmr_root, get_lean_beefy_proof_metadata, u256_byte_reverse, keccak_le, Slice, Range, verify_eth_signature_pre_hashed};
 use alexandria_substrate::substrate_storage_read_proof_verifier::{convert_u8_subarray_to_u8_array, u8_array_eq};
 use alexandria_substrate::blake2b::convert_u8_array_to_felt252_array;
 use debug::PrintTrait;
@@ -54,10 +54,10 @@ fn custom_test() {
 #[available_gas(20000000000)]
 fn test_lean_beefy_proof_verification() {
     let res = get_lean_beefy_proof_metadata(get_lean_beefy_proof().span());
-    let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
+    let maybe_mmr_root: Result<u256, felt252> = match res{
         Result::Ok(beefy_res)=>{
             let (beefy_proof_metadata,_,beefy_payloads) =beefy_res;
-            assert(verify_beefy_signatures(
+            assert(verify_beefy_signatures(Option::None,
                 beefy_proof_metadata.commitment_pre_hashed,
                 beefy_proof_metadata.signatures_from_bitfield,
                 beefy_proof_metadata.validator_set_len,
@@ -70,7 +70,7 @@ fn test_lean_beefy_proof_verification() {
     };
     // panic(convert_u8_array_to_felt252_array(maybe_mmr_root.unwrap()));
     match maybe_mmr_root{
-        Result::Ok(mmr_root)=>{ assert(u8_array_eq(mmr_root, get_expected_mmr_root().span()), 'mmr_root mismatch');},
+        Result::Ok(mmr_root)=>{ assert(mmr_root==get_expected_mmr_root(), 'mmr_root mismatch');},
         Result::Err(e)=>e.print(),
     };
 
@@ -80,10 +80,10 @@ fn test_lean_beefy_proof_verification() {
 }
 
 // [179, 10, 26, 159, 204, 101, 198, 159, 193, 248, 252, 202, 209, 86, 155, 24, 110, 223, 138, 34, 95, 114, 204, 31, 32, 122, 203, 1, 9, 158, 139, 81]
-fn get_expected_mmr_root() -> Array<u8> {
+fn get_expected_mmr_root() -> u256 {
     let mut i: Array<u8> = Default::default();
     i.append(179);i.append(10);i.append(26);i.append(159);i.append(204);i.append(101);i.append(198);i.append(159);i.append(193);i.append(248);i.append(252);i.append(202);i.append(209);i.append(86);i.append(155);i.append(24);i.append(110);i.append(223);i.append(138);i.append(34);i.append(95);i.append(114);i.append(204);i.append(31);i.append(32);i.append(122);i.append(203);i.append(1);i.append(9);i.append(158);i.append(139);i.append(81);
-    i
+    *hashes_to_u256s(i.span()).expect('hashes_to_u256s works').at(0)
 }
 
 // finality_proof: V1(SignedCommitment { commitment: Commitment { payload: Payload([([109, 104], [179, 10, 26, 159, 204, 101, 198, 159, 193, 248, 252, 202, 209, 86, 155, 24, 110, 223, 138, 34, 95, 114, 204, 31, 32, 122, 203, 1, 9, 158, 139, 81])]), block_number: 39, validator_set_id: 3 }, signatures: [Some(Signature(78163315cf79e7d63f48cbd76b6f104f647d070145cd5efdcb83ff48dd8bf85d3fa53daf5a5862d7605d5cfcafbecd58e3a63710bf22d675e378a78032bbb70b00))] }).    
@@ -95,10 +95,11 @@ fn get_lean_beefy_proof() -> Array<u8> {
 }
 
 // [224, 76, 197, 94, 190, 225, 203, 206, 85, 47, 37, 14, 133, 197, 123, 112, 178, 226, 98, 91]
-fn get_current_validator_addresses() -> Array<u8> {
+fn get_current_validator_addresses() -> Array<u256> {
     let mut i: Array<u8> = Default::default();
     i.append(224); i.append(76); i.append(197); i.append(94); i.append(190); i.append(225); i.append(203); i.append(206); i.append(85); i.append(47); i.append(37); i.append(14); i.append(133); i.append(197); i.append(123); i.append(112); i.append(178); i.append(226); i.append(98); i.append(91);
-    i
+    
+    u8_eth_addresses_to_u256(i.span())
 }
 
 // Eth Address - [224, 76, 197, 94, 190, 225, 203, 206, 85, 47, 37, 14, 133, 197, 123, 112, 178, 226, 98, 91]    
@@ -110,10 +111,10 @@ fn get_current_validator_addresses() -> Array<u8> {
 #[available_gas(20000000000)]
 fn test_lean_beefy_proof_verification_2() {
     let res = get_lean_beefy_proof_metadata(get_lean_beefy_proof_2().span());
-    let maybe_mmr_root: Result<Span<u8>, felt252> = match res{
+    let maybe_mmr_root: Result<u256, felt252> = match res{
         Result::Ok(beefy_res)=>{
             let (beefy_proof_metadata,_,beefy_payloads) =beefy_res;
-            assert(verify_beefy_signatures(
+            assert(verify_beefy_signatures(Option::None,
                 beefy_proof_metadata.commitment_pre_hashed,
                 beefy_proof_metadata.signatures_from_bitfield,
                 beefy_proof_metadata.validator_set_len,
@@ -126,7 +127,7 @@ fn test_lean_beefy_proof_verification_2() {
     };
 
     match maybe_mmr_root{
-        Result::Ok(mmr_root)=>{ assert(u8_array_eq(mmr_root, get_expected_mmr_root_2().span()), 'mmr_root mismatch');},
+        Result::Ok(mmr_root)=>{ assert(mmr_root==get_expected_mmr_root_2(), 'mmr_root mismatch');},
         Result::Err(e)=>e.print(),
     };
     // let rs = convert_u8_subarray_to_u8_array(res.span, res.range.start, res.range.end - res.range.start);
@@ -135,10 +136,10 @@ fn test_lean_beefy_proof_verification_2() {
 }
 
 // [9, 60, 135, 194, 44, 243, 27, 165, 135, 135, 229, 11, 224, 172, 76, 236, 61, 110, 240, 137, 146, 98, 184, 184, 64, 91, 232, 194, 81, 142, 207, 195]
-fn get_expected_mmr_root_2() -> Array<u8> {
+fn get_expected_mmr_root_2() -> u256 {
     let mut i: Array<u8> = Default::default();
     i.append(9);i.append(60);i.append(135);i.append(194);i.append(44);i.append(243);i.append(27);i.append(165);i.append(135);i.append(135);i.append(229);i.append(11);i.append(224);i.append(172);i.append(76);i.append(236);i.append(61);i.append(110);i.append(240);i.append(137);i.append(146);i.append(98);i.append(184);i.append(184);i.append(64);i.append(91);i.append(232);i.append(194);i.append(81);i.append(142);i.append(207);i.append(195);
-    i
+    *hashes_to_u256s(i.span()).expect('hashes_to_u256s works').at(0)
 }
 
 fn get_lean_beefy_proof_2() -> Array<u8> {
@@ -147,17 +148,18 @@ fn get_lean_beefy_proof_2() -> Array<u8> {
     i
 }
 
-fn get_current_validator_addresses_2() -> Array<u8> {
+fn get_current_validator_addresses_2() -> Array<u256> {
     let mut i: Array<u8> = Default::default();
     i.append(224); i.append(76); i.append(197); i.append(94); i.append(190); i.append(225); i.append(203); i.append(206); i.append(85); i.append(47); i.append(37); i.append(14); i.append(133); i.append(197); i.append(123); i.append(112); i.append(178); i.append(226); i.append(98); i.append(91);
-    i
+    
+    u8_eth_addresses_to_u256(i.span())
 }
 
 #[test]
 #[available_gas(20000000000)]
 fn test_verify_eth_signature_pre_hashed() {
     let msg = get_msg().span();
-    let commitment_pre_hashed_le = keccak(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
+    let commitment_pre_hashed_le = keccak_le(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
     let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
     let add = get_add().span();
@@ -197,7 +199,7 @@ fn get_sig() -> Array<u8> {
 #[available_gas(20000000000)]
 fn test_verify_eth_signature_pre_hashed_2() {
     let msg = get_msg_2().span();
-    let commitment_pre_hashed_le = keccak(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
+    let commitment_pre_hashed_le = keccak_le(Slice{span: msg, range: Range{start: 0, end: msg.len()}});
     let commitment_pre_hashed = u256_byte_reverse(commitment_pre_hashed_le);
 
     let add = get_add_2().span();
@@ -244,7 +246,7 @@ fn get_sig_2() -> Array<u8> {
 #[available_gas(20000000000)]
 fn verify_mmr_leaves_proof_test(){
     let leaves_hashes = encoded_opaque_leaves_to_hashes(get_leaves().span()).unwrap();
-    let res = verify_mmr_leaves_proof(mmr_root().span(), get_proof().span(), leaves_hashes.span());
+    let res = verify_mmr_leaves_proof(mmr_root(), get_proof().span(), leaves_hashes.span());
 
     match res{
         Result::Ok(_)=>{},
@@ -268,10 +270,10 @@ fn get_proof() -> Array<u8> {
 
 
 // 0xebfa14a7554db04e6128dc6102bb51e44970825d4c2bfb4c4b237af4efe7a791
-fn mmr_root() -> Array<u8> {
+fn mmr_root() -> u256 {
     let mut i: Array<u8> = Default::default();
     i.append(0xeb);i.append(0xfa);i.append(0x14);i.append(0xa7);i.append(0x55);i.append(0x4d);i.append(0xb0);i.append(0x4e);i.append(0x61);i.append(0x28);i.append(0xdc);i.append(0x61);i.append(0x02);i.append(0xbb);i.append(0x51);i.append(0xe4);i.append(0x49);i.append(0x70);i.append(0x82);i.append(0x5d);i.append(0x4c);i.append(0x2b);i.append(0xfb);i.append(0x4c);i.append(0x4b);i.append(0x23);i.append(0x7a);i.append(0xf4);i.append(0xef);i.append(0xe7);i.append(0xa7);i.append(0x91);
-    i
+    *hashes_to_u256s(i.span()).expect('hashes_to_u256s works').at(0)
 }
 
 // #2
@@ -284,7 +286,7 @@ fn mmr_root() -> Array<u8> {
 #[available_gas(20000000000)]
 fn verify_mmr_leaves_proof_test_2(){
     let leaves_hashes = encoded_opaque_leaves_to_hashes(get_leaves_2().span()).unwrap();
-    let res = verify_mmr_leaves_proof(mmr_root_2().span(), get_proof_2().span(), leaves_hashes.span());
+    let res = verify_mmr_leaves_proof(mmr_root_2(), get_proof_2().span(), leaves_hashes.span());
 
     match res{
         Result::Ok(_)=>{},
@@ -307,10 +309,10 @@ fn get_proof_2() -> Array<u8> {
 }
 
 // 0xac4b38b0dd9d7562b44102f26ef2292d076a533cbed89f531f6a63f939fdb475
-fn mmr_root_2() -> Array<u8> {
+fn mmr_root_2() -> u256 {
     let mut i: Array<u8> = Default::default();
     i.append(0xac);i.append(0x4b);i.append(0x38);i.append(0xb0);i.append(0xdd);i.append(0x9d);i.append(0x75);i.append(0x62);i.append(0xb4);i.append(0x41);i.append(0x02);i.append(0xf2);i.append(0x6e);i.append(0xf2);i.append(0x29);i.append(0x2d);i.append(0x07);i.append(0x6a);i.append(0x53);i.append(0x3c);i.append(0xbe);i.append(0xd8);i.append(0x9f);i.append(0x53);i.append(0x1f);i.append(0x6a);i.append(0x63);i.append(0xf9);i.append(0x39);i.append(0xfd);i.append(0xb4);i.append(0x75);
-    i
+    *hashes_to_u256s(i.span()).expect('hashes_to_u256s works').at(0)
 }
 
 #[test]
