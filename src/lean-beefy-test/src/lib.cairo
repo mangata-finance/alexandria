@@ -19,24 +19,6 @@ use serde::Serde;
 /// @dev Trait defining the functions that can be implemented or called by the Starknet Contract
 #[starknet::interface]
 trait VoteTrait<T> {
-    /// @dev Function that returns the current vote status
-    // fn get_vote_status(self: @T) -> (u8, u8, u8, u8);
-
-    /// @dev Function that checks if the user at the specified address is allowed to vote
-    fn voter_can_vote(ref self: T, user_address: ContractAddress, array: Array<u8>) -> Array<u8>;
-    // fn voter_can_vote_2(ref self: T, user_address: ContractAddress, array: Array<u8>) -> Array<u8>;
-    // fn voter_can_vote_3(ref self: T, user_address: ContractAddress, array: Array<u8>) -> Array<u8>;
-
-    fn check_beefy_payload_len(self: @T, array: Array<u8>) -> u32;
-    fn check_beefy_payload_len_u256(self: @T, array: Array<u256>) -> u32;
-
-
-    fn check_beefy_payload_len_invoke(ref self: T, array: Array<u8>) -> u32;
-    fn check_beefy_payload_len_u256_invoke(ref self: T, array: Array<u256>) -> u32;
-
-    fn write_u8_array(ref self: T, array: Array<u8>, len: usize);
-    fn read_u8_array(self: @T, len: usize) -> usize;
-
     fn unset_validator_set_info(ref self: T, validator_set_id: u64);
     fn set_validator_set_info(ref self: T, validator_set_id: u64, validator_set_list: Array<u256>);
     fn set_validator_set_info_u8_array(
@@ -44,7 +26,7 @@ trait VoteTrait<T> {
     );
     fn calculate_merkle_hash_for_validator_set(ref self: T, validator_set_id: u64);
     fn full_reset_current_beefy_proof(ref self: T);
-    fn verify_lean_beefy_proof(ref self: T, lean_beefy_proof: Array<u8>);
+    fn verify_lean_beefy_proof(ref self: T, lean_beefy_proof: Array<u8>, sig_ver_limit: Option<usize>);
     fn verify_beefy_mmr_leaves_proof(ref self: T, leaves: Array<u8>, proof: Array<u8>);
     fn verify_beefy_para_data(
         ref self: T, leaf_index: usize, leaf: Array<u8>, proof: Array<u8>, number_of_leaves: usize
@@ -205,7 +187,7 @@ mod Vote {
         verify_substrate_storage_read_proof, verify_substrate_storage_read_proof_given_hashes,
         convert_u8_subarray_to_u8_array
     };
-    use alexandria_substrate::lean_beefy_verifier::{
+    use alexandria_substrate::lean_beefy_verifier::{keccak_be,
         decode_paradata, Slice, u256_byte_reverse, keccak_le, Range,
         encoded_opaque_leaves_to_leaves, u8_eth_addresses_to_u256, verify_beefy_signatures,
         get_mmr_root, VALIDATOR_ADDRESS_LEN, get_lean_beefy_proof_metadata, BeefyProofInfo,
@@ -234,11 +216,15 @@ mod Vote {
 
 
     use poseidon::poseidon_hash_span;
-    use starknet::storage_access::Felt252TryIntoStorageAddress;
+    use starknet::storage_access::{Felt252TryIntoStorageAddress, storage_base_address_from_felt252, storage_address_from_base_and_offset};
     use starknet::StorageAddress;
 
     type ValidatorSetId = u64;
     const PARA_ID: u32 = 2110;
+
+    const READ_PROOF_KEY_ADDRESS: felt252 = 'read_proof_key';
+    const READ_PROOF_VALUE_ADDRESS: felt252 = 'read_proof_value';
+
 
     const YES: u8 = 1_u8;
     const NO: u8 = 0_u8;
@@ -261,12 +247,20 @@ mod Vote {
         current_beefy_proof_info: Option<BeefyProofInfo>,
         current_beefy_data: Option<BeefyData>,
         current_para_data: Option<ParaData>,
+        broken_validator_chain_info: Option<(u32, ValidatorSetId, u32, ValidatorSetId)>,
+        unvalidated_validator_set_info: Option<(u32, ValidatorSetId)>,
         last_mmr_root: Option<u256>,
         last_beefy_proof_info: Option<BeefyProofInfo>,
         last_beefy_data: Option<BeefyData>,
         last_para_data: Option<ParaData>,
         last_block_broken_validator_chain: Option<(u32, ValidatorSetId, u32, ValidatorSetId)>,
         last_block_unvalidated_validator_set: Option<(u32, ValidatorSetId)>,
+
+        // the keccak hash here would be the cumulative hash of the node hashes 
+        read_proof_info: Option<(u256, u32, Option<u32>, Option<u32>)>,
+        read_proof_nodes: LegacyMap::<u32, (u256, Option<u256>)>,
+        // read_proof_key:
+        // read_proof_value:
     // last_read_value: Option<LargeArray>,
     }
 
@@ -327,61 +321,6 @@ mod Vote {
     /// @dev Implementation of VoteTrait for ContractState
     #[external(v0)]
     impl VoteImpl of super::VoteTrait<ContractState> {
-        /// @dev Returns the voting results
-        // fn get_vote_status(self: @ContractState) -> (u8, u8, u8, u8) {
-        //     let (n_yes, n_no) = self._get_voting_result();
-        //     let (yes_percentage, no_percentage) = self._get_voting_result_in_percentage();
-        //     return (n_yes, n_no, yes_percentage, no_percentage);
-        // }
-
-        /// @dev Check whether a voter is allowed to vote
-        fn voter_can_vote(
-            ref self: ContractState, user_address: ContractAddress, array: Array<u8>
-        ) -> Array<u8> {
-            // self.can_vote.read(user_address)
-            // TryInto::<usize, u8>::try_into(array.len()).unwrap()
-            let x = blake2b(array.clone());
-            self.emit(VoteCast { voter: user_address, vote: *x.at(0),  });
-            x
-        }
-
-        /// @dev Check whether a voter is allowed to vote
-        fn check_beefy_payload_len(self: @ContractState, array: Array<u8>) -> u32 {
-            array.len()
-        }
-
-        fn check_beefy_payload_len_u256(self: @ContractState, array: Array<u256>) -> u32 {
-            array.len()
-        }
-
-        fn check_beefy_payload_len_invoke(ref self: ContractState, array: Array<u8>) -> u32 {
-            array.len()
-        }
-
-        fn check_beefy_payload_len_u256_invoke(ref self: ContractState, array: Array<u256>) -> u32 {
-            array.len()
-        }
-
-        fn write_u8_array(ref self: ContractState, array: Array<u8>, len: usize) {
-            self.write_test_array(array, len);
-        }
-
-        fn read_u8_array(self: @ContractState, len: usize) -> usize {
-            let array = self.read_test_array(len);
-            array.span().len()
-        }
-
-        // fn voter_can_vote_2(ref self: ContractState, user_address: ContractAddress, array: Array<u8>) -> Array<u8> {
-        //     // self.can_vote.read(user_address)
-        //     // TryInto::<usize, u8>::try_into(array.len()).unwrap()
-        //     sha256(array.clone())
-        // }
-
-        // fn voter_can_vote_3(ref self: ContractState, user_address: ContractAddress, array: Array<u8>) -> Array<u8> {
-        //     // self.can_vote.read(user_address)
-        //     // TryInto::<usize, u8>::try_into(array.len()).unwrap()
-        //     sha512(array.clone())
-        // }
 
         // Ingest beefy proof - Sets Proof info, and maybe metadata about the signature validations
         // 
@@ -586,7 +525,7 @@ mod Vote {
             self.current_para_data.write(Option::None);
         }
 
-        fn verify_lean_beefy_proof(ref self: ContractState, lean_beefy_proof: Array<u8>) {
+        fn verify_lean_beefy_proof(ref self: ContractState, lean_beefy_proof: Array<u8>, sig_ver_limit: Option<usize>) {
             assert(self.current_mmr_root.read().is_none(), 'current_mmr_root exists');
             assert(
                 self.current_beefy_proof_info.read().is_none(), 'current_beefy_proof_info exists'
@@ -607,7 +546,7 @@ mod Vote {
                 assert(info.block_number > last_info.block_number, 'stale proof');
                 if info.validator_set_id > last_info.validator_set_id + 1 {
                     self
-                        .last_block_broken_validator_chain
+                        .broken_validator_chain_info
                         .write(
                             Option::Some(
                                 (
@@ -629,7 +568,7 @@ mod Vote {
 
             if validator_set_info.validated_at.is_none() {
                 self
-                    .last_block_unvalidated_validator_set
+                    .unvalidated_validator_set_info
                     .write(Option::Some((info.block_number, info.validator_set_id)));
             }
 
@@ -651,7 +590,7 @@ mod Vote {
 
             assert(
                 verify_beefy_signatures(
-                    Option::Some(2),
+                    sig_ver_limit,
                     metadata.commitment_pre_hashed,
                     metadata.signatures_from_bitfield,
                     metadata.validator_set_len,
@@ -824,55 +763,147 @@ mod Vote {
                 Option::None => {}
             };
 
+            let broken_validator_chain_info = self.broken_validator_chain_info.read();
+            let unvalidated_validator_set_info = self.unvalidated_validator_set_info.read();
+
+            if broken_validator_chain_info.is_some(){
+                self.last_block_broken_validator_chain.write(broken_validator_chain_info);
+            }
+
+            if unvalidated_validator_set_info.is_some(){
+                self.last_block_unvalidated_validator_set.write(unvalidated_validator_set_info);
+            }
+
             self.current_mmr_root.write(Option::None);
             self.current_beefy_proof_info.write(Option::None);
             self.current_beefy_data.write(Option::None);
             self.current_para_data.write(Option::None);
+            self.broken_validator_chain_info.write(Option::None);
+            self.unvalidated_validator_set_info.write(Option::None);
 
-            self.current_mmr_root.write(Option::Some(current_mmr_root));
-            self.current_beefy_proof_info.write(Option::Some(current_beefy_proof_info));
-            self.current_beefy_data.write(Option::Some(current_beefy_data));
-            self.current_para_data.write(Option::Some(current_para_data));
+            self.last_mmr_root.write(Option::Some(current_mmr_root));
+            self.last_beefy_proof_info.write(Option::Some(current_beefy_proof_info));
+            self.last_beefy_data.write(Option::Some(current_beefy_data));
+            self.last_para_data.write(Option::Some(current_para_data));
+        }
+
+    }
+
+    fn initialize_storage_read_proof_verification(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<u8>, key: Array<u8>) {
+        assert(self.read_proof_info.read().is_none(), 'use unset_storage_read_proof');
+
+    }
+
+    fn verify_storage_read_proof_and_get_value(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<u8>, key: Array<u8>) {
+    }
+
+    fn unset_storage_read_proof(ref self: ContractState) {
+
+        let read_proof_info = self.read_proof_info.read();
+
+        match read_proof_info{
+            Option::Some((_keccak_hash, num_nodes, maybe_num_bytes_key, maybe_num_bytes_value))=>{
+                let mut itr:usize =0;
+                loop{
+                    if itr==num_nodes{break;}
+                    self.read_proof_nodes.write(itr, (0, Option::None));
+                    itr=itr+1;
+                };
+
+                if maybe_num_bytes_key.is_some(){
+                    self.write_large_array::<u8>(READ_PROOF_KEY_ADDRESS, array![]);
+                }
+
+                if maybe_num_bytes_value.is_some(){
+                    self.write_large_array::<u8>(READ_PROOF_VALUE_ADDRESS, array![]);
+                }
+                self.read_proof_info.write(Option::None);
+            },
+            Option::None=>{},
         }
 
     }
 
 
     #[generate_trait]
-    impl WriteTestArray of IWriteTestArray {
-        fn write_test_array(ref self: ContractState, array: Array<u8>, len: usize) {
-            let mut address = WriteTestArray::get_address_from_name(TEST_BASE_ADDRESS);
+    impl StoreLargeArray of IStoreLargeArray {
+
+        fn write_large_array<T, impl TCopy: Copy<T>, impl TDrop: Drop<T>, impl TStore: Store<T>, 
+            >(ref self: ContractState, address:felt252, array: Array<T>)
+            {
+            let mut address = StoreLargeArray::get_address_from_name(address);
+
+            let old_array_size: u64 = Store::<u64>::read(0, storage_base_address_from_felt252(address)).expect('read works');
+
+            let element_size: u8 = Store::<T>::size();
+            let array_len: u32 = array.len();
+            let array_size: u64 = array_len.into() * element_size.into();
+
+            if old_array_size>array_size{
+                let mut offset:felt252 =0;
+                offset=offset + Store::<u8>::size().into() + Store::<u32>::size().into() + array_size.into();
+                let num_del_slots = old_array_size-array_size;
+
+                let mut itr:u64 =0;
+                loop{
+                    if itr==num_del_slots{break;}
+                    storage_write_syscall(0, storage_address_from_base_and_offset(storage_base_address_from_felt252(address + offset), 0), 0);
+                    offset=offset + Store::<felt252>::size().into();
+                    itr=itr+1;
+                }
+            }
+
+            
+            Store::<u64>::write(0, storage_base_address_from_felt252(address), array_size);
+            address = address + Store::<u64>::size().into();
+            Store::<u32>::write(0, storage_base_address_from_felt252(address), array_len);
+            address = address + Store::<u32>::size().into();
+
             let mut itr: usize = 0;
             loop {
-                if itr == len {
+                if itr == array_len {
                     break;
                 }
-                storage_write_syscall(0, address.try_into().unwrap(), (*array.at(0)).into());
-                address = address + Store::<u8>::size().into();
+                Store::<T>::write(0, storage_base_address_from_felt252(address), (*array.at(itr)).into());
+                address = address + element_size.into();
                 itr = itr + 1;
             };
         }
 
-        fn read_test_array(self: @ContractState, len: usize) -> Array<u8> {
-            let mut address = WriteTestArray::get_address_from_name(TEST_BASE_ADDRESS);
-            let mut array: Array<u8> = array![];
+        fn read_large_array<T, impl TCopy: Copy<T>, impl TDrop: Drop<T>, impl TStore: Store<T>, 
+            >(ref self: ContractState, address:felt252) -> Array<T>{
+            let mut address = StoreLargeArray::get_address_from_name(address);
+            let array_size = Store::<u64>::read(0, storage_base_address_from_felt252(address)).expect('read works');
+            address = address + Store::<felt252>::size().into();
+            let array_length = Store::<u32>::read(0, storage_base_address_from_felt252(address)).expect('read works');
+            address = address + Store::<u32>::size().into();
+
+            let mut array: Array<T> = array![];
             let mut itr: usize = 0;
             loop {
-                if itr == len {
+                if itr == array_length {
                     break;
                 }
-                array
-                    .append(
-                        storage_read_syscall(0, address.try_into().unwrap())
-                            .unwrap_syscall()
-                            .try_into()
-                            .unwrap()
+                array.append(
+                        Store::<T>::read(0, storage_base_address_from_felt252(address)).expect('read works')
                     );
-                address = address + Store::<u8>::size().into();
+                address = address + Store::<T>::size().into();
                 itr = itr + 1;
             };
             array
         }
+
+        fn read_large_array_len<T, impl TCopy: Copy<T>, impl TDrop: Drop<T>, impl TStore: Store<T>, 
+            >(ref self: ContractState, address:felt252) -> u32{
+            let mut address = StoreLargeArray::get_address_from_name(address);
+            let array_size = Store::<u64>::read(0, storage_base_address_from_felt252(address)).expect('read works');
+            address = address + Store::<felt252>::size().into();
+            let array_length = Store::<u32>::read(0, storage_base_address_from_felt252(address)).expect('read works');
+            address = address + Store::<u32>::size().into();
+
+            array_length
+        }
+
         fn get_address_from_name(variable_name: felt252) -> felt252 {
             let hashed_name: felt252 = poseidon_hash_span(array![variable_name].span());
             let MASK_250: u256 = 0x03ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;

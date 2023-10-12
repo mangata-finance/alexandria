@@ -105,9 +105,9 @@ fn verify_substrate_storage_read_proof_given_hashes(
     buffer_node_index: Span<usize>,
     key: Span<u8>,
     root: Span<u8>,
-    hashes: Span<u8>
+    hashes: Span<u256>
 ) -> Result<Slice<u8>, felt252> {
-    if hashes.len() != (HASH_LENGTH * buffer_node_index.len()) {
+    if hashes.len() != buffer_node_index.len() {
         return Result::Err('Bad Hashes Array');
     };
 
@@ -213,7 +213,42 @@ fn verify_substrate_storage_read_proof(
         return Result::Err('Bad Hashes Array');
     };
 
-    lookup_value(buffer, buffer_node_index, key, hashes.span(), root)
+    let hashes_u256 = hashes_to_u256s(hashes.span()).expect('len checked above');
+
+    lookup_value(buffer, buffer_node_index, key, hashes_u256.span(), root)
+}
+
+fn hashes_to_u256s(hashes: Span<u8>) -> Result<Array<u256>, felt252> {
+    let hashes_len: usize = hashes.len() / HASH_LENGTH;
+    if (hashes_len * HASH_LENGTH) != hashes.len() {
+        return Result::Err('Bad hashes len');
+    }
+
+    let mut itr: usize = 0;
+    let mut val_u256: u256 = 0;
+    let mut be_u256s: Array<u256> = array![];
+    let mut citr: usize = 0;
+
+    loop {
+        if itr == hashes_len {
+            break;
+        }
+        val_u256 = 0;
+        citr = 0;
+
+        loop {
+            if citr == HASH_LENGTH {
+                break;
+            }
+            val_u256 = Into::<u8, u256>::into(*hashes.at(itr * HASH_LENGTH + citr))
+                + val_u256 * 256_u256;
+            citr = citr + 1;
+        };
+
+        be_u256s.append(val_u256);
+        itr = itr + 1;
+    };
+    Result::Ok(be_u256s)
 }
 
 fn get_array_from_span(buffer: Span<u8>, range: Range) -> Array<u8> {
@@ -280,7 +315,7 @@ fn convert_u8_subarray_to_felt252_array(
 }
 
 fn lookup_value(
-    buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hashes: Span<u8>, root: Span<u8>
+    buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>, hashes: Span<u256>, root: Span<u8>
 ) -> Result<Slice<u8>, felt252> {
     let mut key_nibble_offset: usize = 0;
     let mut hash = Slice { span: root, range: Range { start: 0, end: root.len() } };
@@ -501,7 +536,7 @@ fn nibble_partial_len_eq(
 }
 
 fn load_value(
-    buffer: Span<u8>, v: ValuePlan, hashes: Span<u8>, buffer_index: Span<usize>
+    buffer: Span<u8>, v: ValuePlan, hashes: Span<u256>, buffer_index: Span<usize>
 ) -> Slice<u8> {
     match v {
         ValuePlan::Inline(value_plan) => Slice { span: buffer, range: value_plan },
@@ -513,11 +548,15 @@ fn load_value(
 }
 
 fn get_node(
-    hash: Slice<u8>, hashes: Span<u8>, buffer: Span<u8>, buffer_index: Span<usize>
+    hash: Slice<u8>, hashes: Span<u256>, buffer: Span<u8>, buffer_index: Span<usize>
 ) -> Option<Slice<u8>> {
     let mut res: Option<Slice<u8>> = Option::None(());
     let mut itr = 0;
-    let number_of_hashes = hashes.len() / HASH_LENGTH;
+    let number_of_hashes = hashes.len();
+
+    assert((hash.range.end-hash.range.start) == HASH_LENGTH, 'Bad hash length');
+
+    let hash_u256 = *hashes_to_u256s(hash.span.slice(hash.range.start, HASH_LENGTH)).expect('len checked above').at(0);
 
     if number_of_hashes != buffer_index.len() {
         return Option::None(());
@@ -531,18 +570,9 @@ fn get_node(
 
         itr2 = 0;
 
-        loop {
-            if itr2 == HASH_LENGTH {
-                break;
-            }
-
-            if !(*hash.span.at(hash.range.start + itr2) == *hashes.at(itr * HASH_LENGTH + itr2)) {
-                eq = false;
-                break;
-            }
-
-            itr2 = itr2 + 1;
-        };
+        if hash_u256 != *hashes.at(itr){
+            eq = false;
+        }
 
         if eq {
             if itr == (number_of_hashes - 1) {

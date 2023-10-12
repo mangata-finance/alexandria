@@ -1728,6 +1728,10 @@ fn inc_bitfield_marker_unchecked(
     validator_count = validator_count + 1;
 }
 
+fn keccak_be(input: Slice<u8>) -> u256 {
+    u256_byte_reverse(keccak_le(input))
+}
+
 // returns le encoded output
 fn keccak_le(input: Slice<u8>) -> u256 {
     let len: usize = input.range.end - input.range.start;

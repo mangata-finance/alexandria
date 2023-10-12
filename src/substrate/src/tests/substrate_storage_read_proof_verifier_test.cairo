@@ -1,6 +1,7 @@
 use array::{ArrayTrait, SpanTrait};
 use alexandria_substrate::blake2b::{convert_u8_array_to_felt252_array};
 use alexandria_substrate::substrate_storage_read_proof_verifier::{
+    hashes_to_u256s,
     verify_substrate_storage_read_proof_given_hashes, verify_substrate_storage_read_proof,
     convert_u8_subarray_to_felt252_array, u8_array_eq, convert_u8_subarray_to_u8_array
 };
@@ -29,7 +30,7 @@ fn test_storage_proof_verification_given_hashes() {
     let (buffer, buffer_index) = get_storage_proof_data();
     let ers = get_expected_raw_storage();
     let res = verify_substrate_storage_read_proof_given_hashes(
-        buffer.span(), buffer_index.span(), get_key().span(), get_root().span(), get_hashes().span()
+        buffer.span(), buffer_index.span(), get_key().span(), get_root().span(), hashes_to_u256s(get_hashes().span()).expect('Bad hashes len').span()
     )
         .unwrap();
     let rs = convert_u8_subarray_to_u8_array(
@@ -63,7 +64,7 @@ fn test_storage_proof_verification_given_hashes_2() {
         buffer_index.span(),
         get_key_2().span(),
         get_root_2().span(),
-        get_hashes_2().span()
+        hashes_to_u256s(get_hashes_2().span()).expect('Bad hashes len').span()
     )
         .unwrap();
     let rs = convert_u8_subarray_to_u8_array(
