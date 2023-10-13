@@ -251,6 +251,46 @@ fn hashes_to_u256s(hashes: Span<u8>) -> Result<Array<u256>, felt252> {
     Result::Ok(be_u256s)
 }
 
+fn u256_to_u8_a(x: u256) -> Array<u8>{
+    let mut arr: Array<u8> = array![];
+
+    arr.append(((x.high / 0x00ffffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x0000ffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x000000ffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000ffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x0000000000ffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x000000000000ffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000ffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x0000000000000000ffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x000000000000000000ffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000ffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x0000000000000000000000ffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x000000000000000000000000ffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000000000ffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x0000000000000000000000000000ffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x000000000000000000000000000000ff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high                                          ) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+
+    arr.append(((x.low / 0x00ffffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x0000ffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x000000ffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000ffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x0000000000ffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x000000000000ffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000ffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x0000000000000000ffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x000000000000000000ffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000ffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x0000000000000000000000ffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x000000000000000000000000ffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000000000ffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x0000000000000000000000000000ffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x000000000000000000000000000000ff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low                                          ) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+
+    arr
+}
+
 fn get_array_from_span(buffer: Span<u8>, range: Range) -> Array<u8> {
     let mut itr = range.start;
     let mut array_op = ArrayTrait::<u8>::new();

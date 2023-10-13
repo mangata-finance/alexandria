@@ -33,6 +33,11 @@ trait VoteTrait<T> {
     );
     fn validate_next_validator_set_info(ref self: T);
     fn finalize_current_lean_beefy_proof(ref self: T);
+    fn initialize_storage_read_proof_verification(ref self: T, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>);
+    fn calculate_blake2b_hash_for_proof_node(ref self: T, buffer: Array<u8>, buffer_index: Array<usize>, itr: usize);
+    fn verify_storage_read_proof_and_get_value(ref self: T, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>);
+    fn unset_storage_read_proof(ref self: T);
+
 }
 
 impl StoreFelt252Array of Store<Array<felt252>> {
@@ -185,14 +190,14 @@ mod Vote {
     use alexandria_math::ed25519::{p, Point, verify_signature, SpanU8TryIntoPoint};
     use alexandria_substrate::substrate_storage_read_proof_verifier::{
         verify_substrate_storage_read_proof, verify_substrate_storage_read_proof_given_hashes,
-        convert_u8_subarray_to_u8_array, get_array_from_span
+        convert_u8_subarray_to_u8_array, get_array_from_span, u256_to_u8_a
     };
     use alexandria_substrate::lean_beefy_verifier::{keccak_be,
         decode_paradata, Slice, u256_byte_reverse, keccak_le, Range,
         encoded_opaque_leaves_to_leaves, u8_eth_addresses_to_u256, verify_beefy_signatures,
         get_mmr_root, VALIDATOR_ADDRESS_LEN, get_lean_beefy_proof_metadata, BeefyProofInfo,
         BeefyAuthoritySet, BeefyData, hashes_to_u256s, verify_merkle_proof, get_hashes_from_items,
-        merkelize_for_merkle_root, encoded_opaque_leaves_to_hashes, verify_mmr_leaves_proof
+        merkelize_for_merkle_root, encoded_opaque_leaves_to_hashes, verify_mmr_leaves_proof, keccak_u256s_be_inputs
     };
     use core::clone::Clone;
     use alexandria_math::sha256::sha256;
@@ -787,88 +792,135 @@ mod Vote {
             self.last_para_data.write(Option::Some(current_para_data));
         }
 
-    }
+        fn initialize_storage_read_proof_verification(ref self: ContractState, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>) {
+            assert(self.read_proof_info.read().is_none(), 'use unset_storage_read_proof');
+            // assert(self.last_para_data.read().is_some(), 'last_para_data missing');
 
-    fn initialize_storage_read_proof_verification(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<u8>, key: Array<u8>) {
-        assert(self.read_proof_info.read().is_none(), 'use unset_storage_read_proof');
+            let num_nodes = buffer_index.len();
+            assert(!num_nodes.is_zero(), 'no nodes in proof');
+            let mut hashes: Array<u256> = array![];
+            let mut itr: usize =0;
+            loop{
+                if itr==num_nodes{break;}
 
-        let num_nodes = buffer_index.len();
-        assert(!num_nodes.is_zero(), 'no nodes in proof');
-        let hashes: Array<u256> = array![];
-        let mut itr: usize =0;
-        loop{
-            if itr==num_nodes{break;}
+                let mut node = Slice{span: buffer ,range: Range{start: 0,end:buffer.len()}}; 
+                if itr==(num_nodes-1){
+                    node = Slice{span: buffer ,range: Range{start: *buffer_index.at(itr),end:buffer.len()}};
+                } else {
+                    node = Slice{span: buffer ,range: Range{start: *buffer_index.at(itr),end:*buffer_index.at(itr+1)}};
+                }
+
+                let hash = keccak_be(node);
+                self.read_proof_nodes.write(itr, Option::Some((hash, Option::None)));
+                hashes.append(hash);
+
+                itr=itr+1;
+            };
+
+            hashes.append(keccak_be(Slice{span: key ,range: Range{start: 0,end:key.len()}}));
+            let hash = keccak_u256s_be_inputs(hashes.span());
+
+            self.read_proof_info.write(Option::Some(
+                (hash, num_nodes, Option::Some(key.len()), Option::None)
+            ));
+
+            self.write_large_array::<u8>(READ_PROOF_KEY_ADDRESS, key);
+
+        }
+
+        fn calculate_blake2b_hash_for_proof_node(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<usize>, itr: usize) {
+            assert(self.read_proof_info.read().is_some(), 'init read proof ver');
+
+            let (node_keccak_hash, node_blake2b_hash) = self.read_proof_nodes.read(itr).expect('No node hash info');
 
             let mut node = Slice{span: buffer.span() ,range: Range{start: 0,end:buffer.len()}}; 
-            if itr==(num_nodes-1){
+            if itr==(buffer_index.len()-1){
                 node = Slice{span: buffer.span() ,range: Range{start: *buffer_index.at(itr),end:buffer.len()}};
             } else {
                 node = Slice{span: buffer.span() ,range: Range{start: *buffer_index.at(itr),end:*buffer_index.at(itr+1)}};
             }
+            assert(keccak_be(node)==node_keccak_hash, 'node_keccak_hash mismatch');
 
-            let hash = keccak_be(node);
-            self.read_proof_nodes.write(itr, Option::Some(hash, Option::None));
-            hashes.append(hash);
+            let hash = *hashes_to_u256s(blake2b(get_array_from_span(
+                        node.span,
+                        alexandria_substrate::substrate_storage_read_proof_verifier::Range{start:node.range.start,end:node.range.end}
+                    )).span()).expect('bad blake2b output').at(0);
 
-            itr=itr+1;
-        };
-
-        hashes.append(keccak_be(Slice{span: key.span() ,range: Range{start: 0,end:key.len()}}));
-        let hash = keccak_u256s_be_inputs(hashes);
-
-        self.read_proof_info.write(Option::Some(
-            hash, num_nodes, Option::Some(key.len()), Option::None
-        ));
-
-    }
-
-    fn calculate_blake2b_hash_for_proof_node(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<u8>, itr: usize) {
-        assert(self.read_proof_info.read().is_some(), 'init read proof ver');
-
-        let (node_keccak_hash, node_blake2b_hash) = self.read_proof_nodes.read(itr).expect('No node hash info');
-
-        let mut node = Slice{span: buffer.span() ,range: Range{start: 0,end:buffer.len()}}; 
-        if itr==(buffer_index.len()-1){
-            node = Slice{span: buffer.span() ,range: Range{start: *buffer_index.at(itr),end:buffer.len()}};
-        } else {
-            node = Slice{span: buffer.span() ,range: Range{start: *buffer_index.at(itr),end:*buffer_index.at(itr+1)}};
+            self.read_proof_nodes.write(itr, Option::Some((node_keccak_hash, Option::Some(hash))));
         }
-        assert(keccak_be(node)==node_keccak_hash, 'node_keccak_hash mismatch');
 
-        let hash = *hashes_to_u256s(blake2b(get_array_from_span(
-                    node.span,
-                    node.range
-                )).span()).expect('bad blake2b output').at(0);
+        fn verify_storage_read_proof_and_get_value(ref self: ContractState, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>) {
+            let storage_root = self.last_para_data.read().expect('last_para_data missing').storage_root;
+            let (init_hash, init_num_nodes, init_maybe_key_len, init_maybe_value_len) = self.read_proof_info.read().expect('read_proof_info unset');
 
-        self.read_proof_nodes.write(itr, Option::Some(node_keccak_hash, Option::Some(hash)));
-    }
+            let num_nodes = buffer_index.len();
+            assert(!num_nodes.is_zero(), 'no nodes in proof');
+            let mut hashes: Array<u256> = array![];
+            let mut blake2b_hashes: Array<u256> = array![];
+            let mut itr: usize =0;
+            loop{
+                if itr==num_nodes{break;}
 
-    fn verify_storage_read_proof_and_get_value(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<u8>, key: Array<u8>) {
-    }
-
-    fn unset_storage_read_proof(ref self: ContractState) {
-
-        let read_proof_info = self.read_proof_info.read();
-
-        match read_proof_info{
-            Option::Some((_keccak_hash, num_nodes, maybe_num_bytes_key, maybe_num_bytes_value))=>{
-                let mut itr:usize =0;
-                loop{
-                    if itr==num_nodes{break;}
-                    self.read_proof_nodes.write(itr, Option::None);
-                    itr=itr+1;
-                };
-
-                if maybe_num_bytes_key.is_some(){
-                    self.write_large_array::<u8>(READ_PROOF_KEY_ADDRESS, array![]);
+                let mut node = Slice{span: buffer ,range: Range{start: 0,end:buffer.len()}}; 
+                if itr==(num_nodes-1){
+                    node = Slice{span: buffer ,range: Range{start: *buffer_index.at(itr),end:buffer.len()}};
+                } else {
+                    node = Slice{span: buffer ,range: Range{start: *buffer_index.at(itr),end:*buffer_index.at(itr+1)}};
                 }
 
-                if maybe_num_bytes_value.is_some(){
-                    self.write_large_array::<u8>(READ_PROOF_VALUE_ADDRESS, array![]);
-                }
-                self.read_proof_info.write(Option::None);
-            },
-            Option::None=>{},
+                let hash = keccak_be(node);
+                let (node_keccak_hash, maybe_node_blake2b_hash) = self.read_proof_nodes.read(itr).expect('read_proof_nodes missing');
+                assert(node_keccak_hash==hash, 'node hash mismatch');
+                hashes.append(hash);
+                blake2b_hashes.append(maybe_node_blake2b_hash.expect('node blake2b hash unset'));
+
+                itr=itr+1;
+            };
+
+            hashes.append(keccak_be(Slice{span: key ,range: Range{start: 0,end:key.len()}}));
+            let hash = keccak_u256s_be_inputs(hashes.span());
+            assert(hash==init_hash, 'hash mismatch');
+
+            let maybe_value = verify_substrate_storage_read_proof(
+                buffer, buffer_index, key, u256_to_u8_a(storage_root).span()
+            );
+
+            let value_slice = maybe_value.expect('read proof ver failed');
+            let value: Span<u8> = value_slice.span.slice(value_slice.range.start, value_slice.range.end - value_slice.range.start);
+
+            self.write_large_array::<u8>(READ_PROOF_VALUE_ADDRESS, value);
+
+            self.read_proof_info.write(Option::Some(
+                (init_hash, init_num_nodes, init_maybe_key_len, Option::Some(value.len()))
+            ));
+
+        }
+
+        fn unset_storage_read_proof(ref self: ContractState) {
+
+            let read_proof_info = self.read_proof_info.read();
+
+            match read_proof_info{
+                Option::Some((_keccak_hash, num_nodes, maybe_num_bytes_key, maybe_num_bytes_value))=>{
+                    let mut itr:usize =0;
+                    loop{
+                        if itr==num_nodes{break;}
+                        self.read_proof_nodes.write(itr, Option::None);
+                        itr=itr+1;
+                    };
+
+                    if maybe_num_bytes_key.is_some(){
+                        self.write_large_array::<u8>(READ_PROOF_KEY_ADDRESS, array![].span());
+                    }
+
+                    if maybe_num_bytes_value.is_some(){
+                        self.write_large_array::<u8>(READ_PROOF_VALUE_ADDRESS, array![].span());
+                    }
+                    self.read_proof_info.write(Option::None);
+                },
+                Option::None=>{},
+            }
+
         }
 
     }
@@ -878,7 +930,7 @@ mod Vote {
     impl StoreLargeArray of IStoreLargeArray {
 
         fn write_large_array<T, impl TCopy: Copy<T>, impl TDrop: Drop<T>, impl TStore: Store<T>, 
-            >(ref self: ContractState, address:felt252, array: Array<T>)
+            >(ref self: ContractState, address:felt252, array: Span<T>)
             {
             let mut address = StoreLargeArray::get_address_from_name(address);
 
