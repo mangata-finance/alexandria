@@ -1,7 +1,3 @@
-/// The Contract Class Hash is 0x8873aa28af0a0e6ac6aa647aa8e8c02cea7752bb7950284dbbbae1be35e9cb
-/// The contract is deployed on the Starknet testnet. The contract address is 0x056d42ddcc1c85959989aaef369e284804a8e59cc5ce519e579fcb121b18f724
-
-/// @dev Core Library Imports for the Traits outside the Starknet Contract
 use starknet::ContractAddress;
 use array::{ArrayTrait, SpanTrait};
 use option::OptionTrait;
@@ -177,8 +173,6 @@ impl StoreOptionT<
     }
 }
 
-
-/// @dev Starknet Contract allowing three registered voters to vote on a proposal
 #[starknet::contract]
 mod MangataStateFinality {
     use starknet::ContractAddress;
@@ -283,15 +277,6 @@ mod MangataStateFinality {
     ) {
         self.contract_owner.write(contract_owner);
     }
-
-    // #[event]
-    // #[derive(Drop, starknet::Event)]
-    // enum Event {
-    //     VoteCast: VoteCast,
-    //     UnauthorizedAttempt: UnauthorizedAttempt,
-    // }
-
-
 
     #[external(v0)]
     impl MangataStateFinalityImpl of super::MangataStateFinalityTrait<ContractState> {
