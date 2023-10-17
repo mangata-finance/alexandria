@@ -18,7 +18,7 @@ use serde::Serde;
 
 /// @dev Trait defining the functions that can be implemented or called by the Starknet Contract
 #[starknet::interface]
-trait VoteTrait<T> {
+trait MangataStateFinalityTrait<T> {
     fn unset_validator_set_info(ref self: T, validator_set_id: u64);
     fn set_validator_set_info(ref self: T, validator_set_id: u64, validator_set_list: Array<u256>);
     fn set_validator_set_info_u8_array(
@@ -180,9 +180,10 @@ impl StoreOptionT<
 
 /// @dev Starknet Contract allowing three registered voters to vote on a proposal
 #[starknet::contract]
-mod Vote {
+mod MangataStateFinality {
     use starknet::ContractAddress;
     use starknet::get_caller_address;
+    use starknet::get_block_info;
     use array::{ArrayTrait, SpanTrait};
     use option::OptionTrait;
     use result::ResultTrait;
@@ -218,6 +219,7 @@ mod Vote {
     use starknet::{eth_address::U256IntoEthAddress, EthAddress};
     use serde::Serde;
     use debug::PrintTrait;
+    use box::BoxTrait;
 
 
     use poseidon::poseidon_hash_span;
@@ -230,22 +232,9 @@ mod Vote {
     const READ_PROOF_KEY_ADDRESS: felt252 = 'read_proof_key';
     const READ_PROOF_VALUE_ADDRESS: felt252 = 'read_proof_value';
 
-
-    const YES: u8 = 1_u8;
-    const NO: u8 = 0_u8;
-
-    const TEST_BASE_ADDRESS: felt252 = 'test_base_address';
-
-    /// @dev Structure that stores vote counts and voter states
     #[storage]
     struct Storage {
-        yes_votes: u8,
-        no_votes: u8,
-        can_vote: LegacyMap::<ContractAddress, bool>,
-        registered_voter: LegacyMap::<ContractAddress, bool>,
-        array_map: LegacyMap::<ContractAddress, Array<felt252>>,
-        test_u256: LegacyMap::<ContractAddress, u256>,
-        array_storage: Array<felt252>,
+        contract_owner: ContractAddress,
         validator_set_info: LegacyMap::<ValidatorSetId, Option<ValidatorSetInfo>>,
         validator_set_list: LegacyMap::<(ValidatorSetId, u32), u256>,
         current_mmr_root: Option<u256>,
@@ -264,6 +253,8 @@ mod Vote {
         // the keccak hash here would be the cumulative hash of the node hashes 
         read_proof_info: Option<(u256, u32, Option<u32>, Option<u32>)>,
         read_proof_nodes: LegacyMap::<u32, Option<(u256, Option<u256>)>>,
+
+        last_read_value_update: Option<u64>,
         // read_proof_key:
         // read_proof_value:
     // last_read_value: Option<LargeArray>,
@@ -285,108 +276,30 @@ mod Vote {
         blake2b_hash: Option<u256>,
     }
 
-    /// @dev Contract constructor initializing the contract with a list of registered voters and 0 vote count
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        voter_1: ContractAddress,
-        voter_2: ContractAddress,
-        voter_3: ContractAddress
+        contract_owner: ContractAddress,
     ) {
-        // Register all voters by calling the _register_voters function 
-        self._register_voters(voter_1, voter_2, voter_3);
-
-        // Initialize the vote count to 0
-        self.yes_votes.write(0_u8);
-        self.no_votes.write(0_u8);
+        self.contract_owner.write(contract_owner);
     }
 
-    /// @dev Event that gets emitted when a vote is cast
-    #[event]
-    #[derive(Drop, starknet::Event)]
-    enum Event {
-        VoteCast: VoteCast,
-        UnauthorizedAttempt: UnauthorizedAttempt,
-    }
-
-    /// @dev Represents a vote that was cast
-    #[derive(Drop, starknet::Event)]
-    struct VoteCast {
-        voter: ContractAddress,
-        vote: u8,
-    }
-
-    /// @dev Represents an unauthorized attempt to vote
-    #[derive(Drop, starknet::Event)]
-    struct UnauthorizedAttempt {
-        unauthorized_address: ContractAddress, 
-    }
+    // #[event]
+    // #[derive(Drop, starknet::Event)]
+    // enum Event {
+    //     VoteCast: VoteCast,
+    //     UnauthorizedAttempt: UnauthorizedAttempt,
+    // }
 
 
-    /// @dev Implementation of VoteTrait for ContractState
+
     #[external(v0)]
-    impl VoteImpl of super::VoteTrait<ContractState> {
-
-        // Ingest beefy proof - Sets Proof info, and maybe metadata about the signature validations
-        // 
-
-        // fn finalize current beefy proof() - updates is_validated_by_proof_before_current and is_validated
-
-        // fn remove_validator_set_info(ref self: ContractState, validator_set_id: u64){
-        //     let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
-        //     match maybe_validator_set_info{
-        //         Option::Some(validator_set_info)=>{
-        //             let number_of_validators = validator_set_info.number_of_validators;
-        //             let mut itr:u32=0;
-        //             loop{
-        //                 if itr==number_of_validators{break;}
-        //                 self.validator_set_list.write((validator_set_id, itr), 0_u256);
-        //                 itr=itr+1;
-        //             };
-
-        //             self.validator_set_info.write(validator_set_id, Option::None);
-        //         },
-        //         Option::None=>{}
-        //     };
-        // }
-
-        // fn depopulate_validator_set(ref self: ContractState, validator_set_id: u64){
-        //     let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
-        //     match maybe_validator_set_info{
-        //         Option::Some(validator_set_info)=>{
-        //             let number_of_validators = validator_set_info.number_of_validators;
-        //             let mut itr:u32=0;
-        //             loop{
-        //                 if itr==number_of_validators{break;}
-        //                 self.validator_set_list.write((validator_set_id, itr), 0_u256);
-        //                 itr=itr+1;
-        //             };
-
-        //             self.validator_set_info.write(validator_set_id, Option::Some(ValidatorSetInfo {
-        //                 number_of_validators: number_of_validators,
-        //                 merkle_hash: validator_set_info.merkle_hash,
-        //                 is_validator_set_populated: false,
-        //                 is_validated: false,
-        //                 is_validated_by_proof_before_current: false,
-        //             }));
-        //         },
-        //         Option::None=>{}
-        //     };
-        // }
-
-        // fn populate_validator_set(ref self: ContractState, validator_set_id: u64, validator_set_list: Array<u256>){
-        //     let number_of_validators = validator_set_list.len().try_into().unwrap();
-        //     let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
-        //     match maybe_validator_set_info{
-        //         Option::Some(validator_set_info)=>{
-        //             assert(validator_set_info.is_validator_set_populated,'Validator set already populated');
-        //             assert()
-        //         },
-        //         Option::None=>{}
-        //     }
-        // }
+    impl MangataStateFinalityImpl of super::MangataStateFinalityTrait<ContractState> {
 
         fn unset_validator_set_info(ref self: ContractState, validator_set_id: u64) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+
             let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
             match maybe_validator_set_info {
                 Option::Some(validator_set_info) => {
@@ -409,6 +322,9 @@ mod Vote {
         fn set_validator_set_info(
             ref self: ContractState, validator_set_id: u64, validator_set_list: Array<u256>
         ) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+
             let number_of_validators: u32 = validator_set_list.len();
             let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
             match maybe_validator_set_info {
@@ -446,6 +362,9 @@ mod Vote {
         fn set_validator_set_info_u8_array(
             ref self: ContractState, validator_set_id: u64, validator_set_list_u8_array: Array<u8>
         ) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+
             let validator_set_list: Array<u256> = u8_eth_addresses_to_u256(
                 validator_set_list_u8_array.span()
             );
@@ -485,6 +404,9 @@ mod Vote {
         }
 
         fn calculate_merkle_hash_for_validator_set(ref self: ContractState, validator_set_id: u64) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             let maybe_validator_set_info = self.validator_set_info.read(validator_set_id);
             match maybe_validator_set_info {
                 Option::Some(validator_set_info) => {
@@ -524,6 +446,9 @@ mod Vote {
 
 
         fn full_reset_current_beefy_proof(ref self: ContractState) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             self.current_mmr_root.write(Option::None);
             self.current_beefy_proof_info.write(Option::None);
             self.current_beefy_data.write(Option::None);
@@ -531,6 +456,9 @@ mod Vote {
         }
 
         fn verify_lean_beefy_proof(ref self: ContractState, lean_beefy_proof: Array<u8>, sig_ver_limit: Option<usize>) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             assert(self.current_mmr_root.read().is_none(), 'current_mmr_root exists');
             assert(
                 self.current_beefy_proof_info.read().is_none(), 'current_beefy_proof_info exists'
@@ -615,6 +543,9 @@ mod Vote {
         fn verify_beefy_mmr_leaves_proof(
             ref self: ContractState, leaves: Array<u8>, proof: Array<u8>
         ) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             assert(self.current_beefy_proof_info.read().is_some(), 'no current_beefy_proof_info');
             assert(self.current_beefy_data.read().is_none(), 'current_beefy_data exists');
             assert(self.current_para_data.read().is_none(), 'current_para_data exists');
@@ -639,6 +570,9 @@ mod Vote {
             proof: Array<u8>,
             number_of_leaves: usize
         ) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             assert(self.current_mmr_root.read().is_some(), 'no current_mmr_root');
             assert(self.current_beefy_proof_info.read().is_some(), 'no current_beefy_proof_info');
             assert(self.current_para_data.read().is_none(), 'current_para_data exists');
@@ -689,6 +623,9 @@ mod Vote {
         }
 
         fn validate_next_validator_set_info(ref self: ContractState) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             let current_beefy_proof_info = self
                 .current_beefy_proof_info
                 .read()
@@ -730,6 +667,9 @@ mod Vote {
         }
 
         fn finalize_current_lean_beefy_proof(ref self: ContractState) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             let current_mmr_root = self.current_mmr_root.read().expect('current_mmr_root missing');
             let current_beefy_proof_info = self
                 .current_beefy_proof_info
@@ -793,6 +733,9 @@ mod Vote {
         }
 
         fn initialize_storage_read_proof_verification(ref self: ContractState, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             assert(self.read_proof_info.read().is_none(), 'use unset_storage_read_proof');
             // assert(self.last_para_data.read().is_some(), 'last_para_data missing');
 
@@ -829,6 +772,9 @@ mod Vote {
         }
 
         fn calculate_blake2b_hash_for_proof_node(ref self: ContractState, buffer: Array<u8>, buffer_index: Array<usize>, itr: usize) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             assert(self.read_proof_info.read().is_some(), 'init read proof ver');
 
             let (node_keccak_hash, node_blake2b_hash) = self.read_proof_nodes.read(itr).expect('No node hash info');
@@ -850,6 +796,9 @@ mod Vote {
         }
 
         fn verify_storage_read_proof_and_get_value(ref self: ContractState, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             let storage_root = self.last_para_data.read().expect('last_para_data missing').storage_root;
             let (init_hash, init_num_nodes, init_maybe_key_len, init_maybe_value_len) = self.read_proof_info.read().expect('read_proof_info unset');
 
@@ -894,10 +843,16 @@ mod Vote {
                 (init_hash, init_num_nodes, init_maybe_key_len, Option::Some(value.len()))
             ));
 
+            self.last_read_value_update.write(Option::Some(
+                get_block_info().unbox().block_number
+            ));
+
         }
 
         fn unset_storage_read_proof(ref self: ContractState) {
-
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
             let read_proof_info = self.read_proof_info.read();
 
             match read_proof_info{
@@ -1015,67 +970,4 @@ mod Vote {
         }
     }
 
-
-    /// @dev Internal Functions implementation for the Vote contract
-    #[generate_trait]
-    impl InternalFunctions of InternalFunctionsTrait {
-
-        /// @dev Registers the voters and initializes their voting status to true (can vote)
-        fn _register_voters(
-            ref self: ContractState,
-            voter_1: ContractAddress,
-            voter_2: ContractAddress,
-            voter_3: ContractAddress
-        ) {
-            self.registered_voter.write(voter_1, true);
-            self.can_vote.write(voter_1, true);
-
-            self.registered_voter.write(voter_2, true);
-            self.can_vote.write(voter_2, true);
-
-            self.registered_voter.write(voter_3, true);
-            self.can_vote.write(voter_3, true);
-        }
-    }
-    /// @dev Asserts implementation for the Vote contract
-    #[generate_trait]
-    impl AssertsImpl of AssertsTrait {
-        // @dev Internal function that checks if an address is allowed to vote
-        fn _assert_allowed(ref self: ContractState, address: ContractAddress) {
-            let is_voter: bool = self.registered_voter.read((address));
-            let can_vote: bool = self.can_vote.read((address));
-
-            if (can_vote == false) {
-                self.emit(UnauthorizedAttempt { unauthorized_address: address,  });
-            }
-
-            assert(is_voter == true, 'USER_NOT_REGISTERED');
-            assert(can_vote == true, 'USER_ALREADY_VOTED');
-        }
-    }
-
-    /// @dev Implement the VotingResultTrait for the Vote contract
-    #[generate_trait]
-    impl VoteResultFunctionsImpl of VoteResultFunctionsTrait {
-        // @dev Internal function to get the voting results (yes and no vote counts)
-        fn _get_voting_result(self: @ContractState) -> (u8, u8) {
-            let n_yes: u8 = self.yes_votes.read();
-            let n_no: u8 = self.no_votes.read();
-
-            return (n_yes, n_no);
-        }
-
-        // @dev Internal function to calculate the voting results in percentage
-        fn _get_voting_result_in_percentage(self: @ContractState) -> (u8, u8) {
-            let n_yes: u8 = self.yes_votes.read();
-            let n_no: u8 = self.no_votes.read();
-
-            let total_votes: u8 = n_yes + n_no;
-
-            let yes_percentage: u8 = (n_yes * 100_u8) / (total_votes);
-            let no_percentage: u8 = (n_no * 100_u8) / (total_votes);
-
-            return (yes_percentage, no_percentage);
-        }
-    }
 }
