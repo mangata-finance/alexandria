@@ -187,7 +187,7 @@ mod MangataStateFinality {
         verify_substrate_storage_read_proof, verify_substrate_storage_read_proof_given_hashes,
         convert_u8_subarray_to_u8_array, get_array_from_span, u256_to_u8_a
     };
-    use alexandria_substrate::lean_beefy_verifier::{keccak_be,
+    use alexandria_substrate::lean_beefy_verifier::{keccak_be, get_hashes_from_items_fixed_length,
         decode_paradata, Slice, u256_byte_reverse, keccak_le, Range,
         encoded_opaque_leaves_to_leaves, u8_eth_addresses_to_u256, verify_beefy_signatures,
         get_mmr_root, VALIDATOR_ADDRESS_LEN, get_lean_beefy_proof_metadata, BeefyProofInfo,
@@ -396,19 +396,23 @@ mod MangataStateFinality {
             match maybe_validator_set_info {
                 Option::Some(validator_set_info) => {
                     let number_of_validators: u32 = validator_set_info.number_of_validators;
-                    let mut validator_set_list: Array<u256> = array![];
+                    let mut validator_set_list_hashed: Array<u256> = array![];
                     let mut itr: u32 = 0;
 
                     loop {
                         if itr == number_of_validators {
                             break;
                         }
-                        validator_set_list
-                            .append(self.validator_set_list.read((validator_set_id, itr)));
+                        validator_set_list_hashed
+                            .append(
+                                u256_byte_reverse(keccak_u256s_be_inputs(
+                                    array![self.validator_set_list.read((validator_set_id, itr))].span()
+                                ))
+                                );
                         itr = itr + 1;
                     };
 
-                    let merkle_root = merkelize_for_merkle_root(validator_set_list.span());
+                    let merkle_root = merkelize_for_merkle_root(validator_set_list_hashed.span());
 
                     self
                         .validator_set_info
@@ -577,6 +581,66 @@ mod MangataStateFinality {
                 leaf_hash
             );
             assert(res, 'merkle proof ver failed');
+
+            let (para_id, para_head) = decode_paradata(leaf.span());
+            assert(para_id == PARA_ID, 'Wrong Para Id');
+
+            let keccak_hash = u256_byte_reverse(
+                keccak_le(
+                    Slice { span: para_head, range: Range { start: 0, end: para_head.len() } }
+                )
+            );
+            let parent_hash = *hashes_to_u256s(para_head.slice(0, 32))
+                .expect('hashes_to_u256s works')
+                .at(0);
+            let storage_root = *hashes_to_u256s(para_head.slice(36, 32))
+                .expect('hashes_to_u256s works')
+                .at(0);
+
+            self
+                .current_para_data
+                .write(
+                    Option::Some(
+                        ParaData {
+                            keccak_hash: keccak_hash,
+                            parent_blake2b_hash: parent_hash,
+                            storage_root: storage_root,
+                            blake2b_hash: Option::None,
+                        }
+                    )
+                );
+        }
+
+        fn verify_beefy_para_data_by_merklization(
+            ref self: ContractState,
+            leaf_index: usize,
+            leaf: Array<u8>,
+            leaves_hashes: Array<u8>,
+        ) {
+            let sender = get_caller_address();
+            assert(sender == self.contract_owner.read(), 'unauthorized access');
+            
+
+            assert((leaves_hashes.len() % HASH_LENGTH).is_zero(), 'Bad leaves_hashes len');
+
+            assert(self.current_mmr_root.read().is_some(), 'no current_mmr_root');
+            assert(self.current_beefy_proof_info.read().is_some(), 'no current_beefy_proof_info');
+            assert(self.current_para_data.read().is_none(), 'current_para_data exists');
+            let current_beefy_data = self
+                .current_beefy_data
+                .read()
+                .expect('current_beefy_data missing');
+
+            let leaf_hash = keccak_be(leaf.span());
+            let leaves_hashes_u256 = hashes_to_u256s(leaves_hashes.span())
+                .expect('leaves_hashes len checked');
+
+            assert(leaves_hashes_u256.len() > leaf_index, 'Bad leaf_index');
+
+            assert!(leaf_hash == *leaves_hashes_u256.at(leaf_index), 'leaf hash mismatch');
+
+            let merkle_root = merkelize_for_merkle_root(leaves_hashes_u256.span());
+            assert(merkle_root == current_beefy_data.leaf_extra, 'merkle root mismatch');
 
             let (para_id, para_head) = decode_paradata(leaf.span());
             assert(para_id == PARA_ID, 'Wrong Para Id');

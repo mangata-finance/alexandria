@@ -278,6 +278,45 @@ fn merkelize_row(mut row: Span<u256>, ) -> Result<u256, Array<u256>> {
     }
 }
 
+fn get_hashes_from_items_fixed_length(
+    buffer: Span<u8>, items_len: usize
+) -> Result<Array<u256>, felt252> {
+
+    assert((buffer.len() % items_len).is_zero(), 'Bad len in get_hashes');
+    let number_of_items = buffer.len() / items_len;
+
+    if number_of_items == 0 {
+        return Result::Err('No items to hash');
+    }
+
+    let mut hashes: Array<u256> = array![];
+    let mut itr: usize = 0;
+
+    let maybe_err: Result<(), felt252> = loop {
+        if itr == number_of_items {
+            break Result::Ok(());
+        }
+
+        let hash_le: u256 = keccak_le(
+            Slice { span: buffer, range: Range { start: itr*items_len, end: (itr*items_len) + items_len } }
+        );
+        let hash: u256 = u256_byte_reverse(hash_le);
+
+        hashes.append(hash);
+
+        itr = itr + 1;
+    };
+
+    match maybe_err {
+        Result::Ok(_) => {},
+        Result::Err(e) => {
+            return Result::Err(e);
+        }
+    };
+
+    Result::Ok(hashes)
+}
+
 fn get_hashes_from_items(
     buffer: Span<u8>, item_lengths: Span<usize>
 ) -> Result<Array<u256>, felt252> {
