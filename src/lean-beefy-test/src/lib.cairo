@@ -684,7 +684,8 @@ mod MangataStateFinality {
                 .read()
                 .expect('current_beefy_data missing');
 
-            match self.validator_set_info.read(current_beefy_proof_info.validator_set_id + 1) {
+            // todo maybe dedup code
+            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.validator_set_id) {
                 Option::Some(mut validator_set_info) => {
                     match validator_set_info.merkle_hash {
                         Option::Some(merkle_hash) => {
@@ -693,11 +694,11 @@ mod MangataStateFinality {
                                 .keyset_commitment == merkle_hash {
                                 validator_set_info
                                     .validated_at =
-                                        Option::Some(current_beefy_proof_info.block_number);
+                                        Option::Some(current_beefy_data.beefy_next_authority_set.block_number);
                                 self
                                     .validator_set_info
                                     .write(
-                                        current_beefy_proof_info.validator_set_id + 1,
+                                        current_beefy_data.beefy_next_authority_set.validator_set_id,
                                         Option::Some(validator_set_info)
                                     );
                             } else {
@@ -733,7 +734,8 @@ mod MangataStateFinality {
                 .read()
                 .expect('current_para_data missing');
 
-            match self.validator_set_info.read(current_beefy_proof_info.validator_set_id + 1) {
+            // todo maybe dedup code
+            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.validator_set_id) {
                 Option::Some(mut validator_set_info) => {
                     match validator_set_info.merkle_hash {
                         Option::Some(merkle_hash) => {
@@ -742,11 +744,11 @@ mod MangataStateFinality {
                                 .keyset_commitment == merkle_hash {
                                 validator_set_info
                                     .validated_at =
-                                        Option::Some(current_beefy_proof_info.block_number);
+                                        Option::Some(current_beefy_data.beefy_next_authority_set.block_number);
                                 self
                                     .validator_set_info
                                     .write(
-                                        current_beefy_proof_info.validator_set_id + 1,
+                                        current_beefy_data.beefy_next_authority_set.validator_set_id,
                                         Option::Some(validator_set_info)
                                     );
                             }
