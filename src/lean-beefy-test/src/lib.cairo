@@ -27,6 +27,12 @@ trait MangataStateFinalityTrait<T> {
     fn verify_beefy_para_data(
         ref self: T, leaf_index: usize, leaf: Array<u8>, proof: Array<u8>, number_of_leaves: usize
     );
+    fn verify_beefy_para_data_by_merklization(
+            ref self: T,
+            leaf_index: usize,
+            leaf: Array<u8>,
+            leaves_hashes: Array<u8>,
+        );
     fn validate_next_validator_set_info(ref self: T);
     fn finalize_current_lean_beefy_proof(ref self: T);
     fn initialize_storage_read_proof_verification(ref self: T, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>);
@@ -192,7 +198,7 @@ mod MangataStateFinality {
         encoded_opaque_leaves_to_leaves, u8_eth_addresses_to_u256, verify_beefy_signatures,
         get_mmr_root, VALIDATOR_ADDRESS_LEN, get_lean_beefy_proof_metadata, BeefyProofInfo,
         BeefyAuthoritySet, BeefyData, hashes_to_u256s, verify_merkle_proof, get_hashes_from_items,
-        merkelize_for_merkle_root, encoded_opaque_leaves_to_hashes, verify_mmr_leaves_proof, keccak_u256s_be_inputs
+        merkelize_for_merkle_root, encoded_opaque_leaves_to_hashes, verify_mmr_leaves_proof, keccak_u256s_be_inputs, HASH_LENGTH
     };
     use core::clone::Clone;
     use alexandria_math::sha256::sha256;
@@ -631,13 +637,13 @@ mod MangataStateFinality {
                 .read()
                 .expect('current_beefy_data missing');
 
-            let leaf_hash = keccak_be(leaf.span());
+            let leaf_hash = keccak_be(Slice{span: leaf.span() ,range: Range{start: 0,end:leaf.len()}});
             let leaves_hashes_u256 = hashes_to_u256s(leaves_hashes.span())
                 .expect('leaves_hashes len checked');
 
             assert(leaves_hashes_u256.len() > leaf_index, 'Bad leaf_index');
 
-            assert!(leaf_hash == *leaves_hashes_u256.at(leaf_index), 'leaf hash mismatch');
+            assert(leaf_hash == *leaves_hashes_u256.at(leaf_index), 'leaf hash mismatch');
 
             let merkle_root = merkelize_for_merkle_root(leaves_hashes_u256.span());
             assert(merkle_root == current_beefy_data.leaf_extra, 'merkle root mismatch');
@@ -685,7 +691,7 @@ mod MangataStateFinality {
                 .expect('current_beefy_data missing');
 
             // todo maybe dedup code
-            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.validator_set_id) {
+            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.id) {
                 Option::Some(mut validator_set_info) => {
                     match validator_set_info.merkle_hash {
                         Option::Some(merkle_hash) => {
@@ -694,11 +700,11 @@ mod MangataStateFinality {
                                 .keyset_commitment == merkle_hash {
                                 validator_set_info
                                     .validated_at =
-                                        Option::Some(current_beefy_data.beefy_next_authority_set.block_number);
+                                        Option::Some(current_beefy_data.block_number);
                                 self
                                     .validator_set_info
                                     .write(
-                                        current_beefy_data.beefy_next_authority_set.validator_set_id,
+                                        current_beefy_data.beefy_next_authority_set.id,
                                         Option::Some(validator_set_info)
                                     );
                             } else {
@@ -735,7 +741,7 @@ mod MangataStateFinality {
                 .expect('current_para_data missing');
 
             // todo maybe dedup code
-            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.validator_set_id) {
+            match self.validator_set_info.read(current_beefy_data.beefy_next_authority_set.id) {
                 Option::Some(mut validator_set_info) => {
                     match validator_set_info.merkle_hash {
                         Option::Some(merkle_hash) => {
@@ -744,11 +750,11 @@ mod MangataStateFinality {
                                 .keyset_commitment == merkle_hash {
                                 validator_set_info
                                     .validated_at =
-                                        Option::Some(current_beefy_data.beefy_next_authority_set.block_number);
+                                        Option::Some(current_beefy_data.block_number);
                                 self
                                     .validator_set_info
                                     .write(
-                                        current_beefy_data.beefy_next_authority_set.validator_set_id,
+                                        current_beefy_data.beefy_next_authority_set.id,
                                         Option::Some(validator_set_info)
                                     );
                             }
