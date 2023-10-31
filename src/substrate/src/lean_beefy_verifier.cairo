@@ -37,7 +37,7 @@ const BEEFY_LEAF_DATA_VERSION: u8 = 0;
 const KECCAK_FULL_RATE_IN_U64S: usize = 17;
 const BYTES_IN_U64_WORD: usize = 8;
 
-#[derive(Drop, Copy, PartialEq)]
+#[derive(Serde, Drop, Copy, PartialEq)]
 struct Range {
     start: usize,
     end: usize
@@ -62,7 +62,7 @@ struct BeefyPayloadEntryPlan<T> {
     BeefyPayloadValuePlan: Range,
 }
 
-#[derive(Drop, Copy, PartialEq, starknet::Store, )]
+#[derive(Serde, Drop, Copy, PartialEq, starknet::Store, )]
 struct BeefyData {
     version: u8,
     block_number: u32,
@@ -71,20 +71,20 @@ struct BeefyData {
     beefy_next_authority_set: BeefyAuthoritySet,
 }
 
-#[derive(Drop, Copy, PartialEq, starknet::Store)]
+#[derive(Serde, Drop, Copy, PartialEq, starknet::Store)]
 struct BeefyAuthoritySet {
     id: u64,
     len: u32,
     keyset_commitment: u256,
 }
-#[derive(Drop, Copy, PartialEq, starknet::Store)]
+#[derive(Serde, Drop, Copy, PartialEq, starknet::Store)]
 struct BeefyProofInfo {
     block_number: u32,
     validator_set_id: u64,
     is_proof_verification_completed: bool,
 }
 
-#[derive(Drop, Copy)]
+#[derive(Serde, Drop, Copy)]
 struct BeefyProofMetadata {
     commitment_pre_hashed: u256,
     signatures_from_bitfield: Span<u8>,

@@ -10,4 +10,4 @@ alexandria_substrate = { path = "../substrate/" }
 [[target.starknet-contract]]
 allowed-libfuncs-list.name = "experimental"
 sierra = true
-casm = false
+casm = true

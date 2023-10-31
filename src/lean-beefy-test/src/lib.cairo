@@ -40,6 +40,25 @@ trait MangataStateFinalityTrait<T> {
     fn verify_storage_read_proof_and_get_value(ref self: T, buffer: Span<u8>, buffer_index: Span<usize>, key: Span<u8>);
     fn unset_storage_read_proof(ref self: T);
 
+    fn get_contract_owner(self: @T) -> ContractAddress;
+    fn get_validator_set_info(self: @T, v: MangataStateFinality::ValidatorSetId) -> Option<MangataStateFinality::ValidatorSetInfo>;
+    fn get_validator_set_list(self: @T, v: MangataStateFinality::ValidatorSetId, i: u32) -> u256;
+    fn get_current_mmr_root(self: @T) -> Option<u256>;
+    fn get_current_beefy_proof_info(self: @T) -> Option<MangataStateFinality::BeefyProofInfo>;
+    fn get_current_beefy_data(self: @T) -> Option<MangataStateFinality::BeefyData>;
+    fn get_current_para_data(self: @T) -> Option<MangataStateFinality::ParaData>;
+    fn get_broken_validator_chain_info(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId, u32, MangataStateFinality::ValidatorSetId)>;
+    fn get_unvalidated_validator_set_info(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId)>;
+    fn get_last_mmr_root(self: @T) -> Option<u256>;
+    fn get_last_beefy_proof_info(self: @T) -> Option<MangataStateFinality::BeefyProofInfo>;
+    fn get_last_beefy_data(self: @T) -> Option<MangataStateFinality::BeefyData>;
+    fn get_last_para_data(self: @T) -> Option<MangataStateFinality::ParaData>;
+    fn get_last_block_broken_validator_chain(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId, u32, MangataStateFinality::ValidatorSetId)>;
+    fn get_last_block_unvalidated_validator_set(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId)>;
+    fn get_read_proof_info(self: @T) -> Option<(u256, u32, Option<u32>, Option<u32>)>;
+    fn get_read_proof_nodes(self: @T, i: u32) -> Option<(u256, Option<u256>)>;
+    fn get_last_read_value_update(self: @T) -> Option<u64>;
+
 }
 
 impl StoreFelt252Array of Store<Array<felt252>> {
@@ -286,6 +305,60 @@ mod MangataStateFinality {
 
     #[external(v0)]
     impl MangataStateFinalityImpl of super::MangataStateFinalityTrait<ContractState> {
+        fn get_contract_owner(self: @ContractState) -> ContractAddress{
+            self.contract_owner.read()
+        }
+        fn get_validator_set_info(self: @ContractState, v: ValidatorSetId) -> Option<ValidatorSetInfo>{
+            self.validator_set_info.read(v)
+        }
+        fn get_validator_set_list(self: @ContractState, v: ValidatorSetId, i: u32) -> u256{
+            self.validator_set_list.read((v, i))
+        }
+        fn get_current_mmr_root(self: @ContractState) -> Option<u256>{
+            self.current_mmr_root.read()
+        }
+        fn get_current_beefy_proof_info(self: @ContractState) -> Option<BeefyProofInfo>{
+            self.current_beefy_proof_info.read()
+        }
+        fn get_current_beefy_data(self: @ContractState) -> Option<BeefyData>{
+            self.current_beefy_data.read()
+        }
+        fn get_current_para_data(self: @ContractState) -> Option<ParaData>{
+            self.current_para_data.read()
+        }
+        fn get_broken_validator_chain_info(self: @ContractState) -> Option<(u32, ValidatorSetId, u32, ValidatorSetId)>{
+            self.broken_validator_chain_info.read()
+        }
+        fn get_unvalidated_validator_set_info(self: @ContractState) -> Option<(u32, ValidatorSetId)>{
+            self.unvalidated_validator_set_info.read()
+        }
+        fn get_last_mmr_root(self: @ContractState) -> Option<u256>{
+            self.last_mmr_root.read()
+        }
+        fn get_last_beefy_proof_info(self: @ContractState) -> Option<BeefyProofInfo>{
+            self.last_beefy_proof_info.read()
+        }
+        fn get_last_beefy_data(self: @ContractState) -> Option<BeefyData>{
+            self.last_beefy_data.read()
+        }
+        fn get_last_para_data(self: @ContractState) -> Option<ParaData>{
+            self.last_para_data.read()
+        }
+        fn get_last_block_broken_validator_chain(self: @ContractState) -> Option<(u32, ValidatorSetId, u32, ValidatorSetId)>{
+            self.last_block_broken_validator_chain.read()
+        }
+        fn get_last_block_unvalidated_validator_set(self: @ContractState) -> Option<(u32, ValidatorSetId)>{
+            self.last_block_unvalidated_validator_set.read()
+        }
+        fn get_read_proof_info(self: @ContractState) -> Option<(u256, u32, Option<u32>, Option<u32>)>{
+            self.read_proof_info.read()
+        }
+        fn get_read_proof_nodes(self: @ContractState, i: u32) -> Option<(u256, Option<u256>)>{
+            self.read_proof_nodes.read(i)
+        }
+        fn get_last_read_value_update(self: @ContractState) -> Option<u64>{
+            self.last_read_value_update.read()
+        }
 
         fn unset_validator_set_info(ref self: ContractState, validator_set_id: u64) {
             let sender = get_caller_address();
