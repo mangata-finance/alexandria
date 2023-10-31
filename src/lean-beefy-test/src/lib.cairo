@@ -55,7 +55,7 @@ trait MangataStateFinalityTrait<T> {
     fn get_last_para_data(self: @T) -> Option<MangataStateFinality::ParaData>;
     fn get_last_block_broken_validator_chain(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId, u32, MangataStateFinality::ValidatorSetId)>;
     fn get_last_block_unvalidated_validator_set(self: @T) -> Option<(u32, MangataStateFinality::ValidatorSetId)>;
-    fn get_read_proof_info(self: @T) -> Option<(u256, u32, Option<u32>, Option<u32>)>;
+    fn get_read_proof_info(self: @T) -> Option<((u256, u32, u256), Option<u32>, Option<u32>)>;
     fn get_read_proof_nodes(self: @T, i: u32) -> Option<(u256, Option<u256>)>;
     fn get_last_read_value_update(self: @T) -> Option<u64>;
 
@@ -270,7 +270,7 @@ mod MangataStateFinality {
         last_block_unvalidated_validator_set: Option<(u32, ValidatorSetId)>,
 
         // the keccak hash here would be the cumulative hash of the node hashes 
-        read_proof_info: Option<(u256, u32, Option<u32>, Option<u32>)>,
+        read_proof_info: Option<((u256, u32, u256), Option<u32>, Option<u32>)>,
         read_proof_nodes: LegacyMap::<u32, Option<(u256, Option<u256>)>>,
 
         last_read_value_update: Option<u64>,
@@ -350,7 +350,7 @@ mod MangataStateFinality {
         fn get_last_block_unvalidated_validator_set(self: @ContractState) -> Option<(u32, ValidatorSetId)>{
             self.last_block_unvalidated_validator_set.read()
         }
-        fn get_read_proof_info(self: @ContractState) -> Option<(u256, u32, Option<u32>, Option<u32>)>{
+        fn get_read_proof_info(self: @ContractState) -> Option<((u256, u32, u256), Option<u32>, Option<u32>)>{
             self.read_proof_info.read()
         }
         fn get_read_proof_nodes(self: @ContractState, i: u32) -> Option<(u256, Option<u256>)>{
@@ -867,7 +867,7 @@ mod MangataStateFinality {
             assert(sender == self.contract_owner.read(), 'unauthorized access');
             
             assert(self.read_proof_info.read().is_none(), 'use unset_storage_read_proof');
-            // assert(self.last_para_data.read().is_some(), 'last_para_data missing');
+            let storage_root = self.last_para_data.read().expect('last_para_data missing').storage_root;
 
             let num_nodes = buffer_index.len();
             assert(!num_nodes.is_zero(), 'no nodes in proof');
@@ -891,10 +891,11 @@ mod MangataStateFinality {
             };
 
             hashes.append(keccak_be(Slice{span: key ,range: Range{start: 0,end:key.len()}}));
+            hashes.append(storage_root);
             let hash = keccak_u256s_be_inputs(hashes.span());
 
             self.read_proof_info.write(Option::Some(
-                (hash, num_nodes, Option::Some(key.len()), Option::None)
+                ((hash, num_nodes, storage_root), Option::Some(key.len()), Option::None)
             ));
 
             self.write_large_array::<u8>(READ_PROOF_KEY_ADDRESS, key);
@@ -929,8 +930,7 @@ mod MangataStateFinality {
             let sender = get_caller_address();
             assert(sender == self.contract_owner.read(), 'unauthorized access');
             
-            let storage_root = self.last_para_data.read().expect('last_para_data missing').storage_root;
-            let (init_hash, init_num_nodes, init_maybe_key_len, init_maybe_value_len) = self.read_proof_info.read().expect('read_proof_info unset');
+            let ((init_hash, init_num_nodes, storage_root), init_maybe_key_len, init_maybe_value_len) = self.read_proof_info.read().expect('read_proof_info unset');
 
             let num_nodes = buffer_index.len();
             assert(!num_nodes.is_zero(), 'no nodes in proof');
@@ -957,6 +957,7 @@ mod MangataStateFinality {
             };
 
             hashes.append(keccak_be(Slice{span: key ,range: Range{start: 0,end:key.len()}}));
+            hashes.append(storage_root);
             let hash = keccak_u256s_be_inputs(hashes.span());
             assert(hash==init_hash, 'hash mismatch');
 
@@ -970,7 +971,7 @@ mod MangataStateFinality {
             self.write_large_array::<u8>(READ_PROOF_VALUE_ADDRESS, value);
 
             self.read_proof_info.write(Option::Some(
-                (init_hash, init_num_nodes, init_maybe_key_len, Option::Some(value.len()))
+                ((init_hash, init_num_nodes, storage_root), init_maybe_key_len, Option::Some(value.len()))
             ));
 
             self.last_read_value_update.write(Option::Some(
@@ -986,7 +987,7 @@ mod MangataStateFinality {
             let read_proof_info = self.read_proof_info.read();
 
             match read_proof_info{
-                Option::Some((_keccak_hash, num_nodes, maybe_num_bytes_key, maybe_num_bytes_value))=>{
+                Option::Some(((_keccak_hash, num_nodes, _storage_root), maybe_num_bytes_key, maybe_num_bytes_value))=>{
                     let mut itr:usize =0;
                     loop{
                         if itr==num_nodes{break;}
