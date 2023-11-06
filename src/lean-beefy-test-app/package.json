@@ -1,0 +1,36 @@
+{
+  "name": "testapi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@polkadot/api": "../../polkadotjs-ws/api/packages/api/build",
+    "@polkadot/util-crypto": "^12.5.1",
+    "ethereum-public-key-to-address": "^0.0.5",
+    "fs": "^0.0.1-security",
+    "keccak": "^3.0.4",
+    "starknet": "^5.19.5"
+  },
+  "resolutions": {
+    "@polkadot/api": "../../polkadotjs-ws/api/packages/api/build",
+    "@polkadot/api-derive": "../../polkadotjs-ws/api/packages/api-derive/build",
+    "@polkadot/types-augment": "../../polkadotjs-ws/api/packages/types-augment/build",
+    "@polkadot/rpc-core": "../../polkadotjs-ws/api/packages/rpc-core/build",
+    "@polkadot/rpc-augment": "../../polkadotjs-ws/api/packages/rpc-augment/build",
+    "@polkadot/types": "../../polkadotjs-ws/api/packages/types/build",
+    "@polkadot/rpc-provider": "../../polkadotjs-ws/api/packages/rpc-provider/build",
+    "@polkadot/types-codec": "../../polkadotjs-ws/api/packages/types-codec/build",
+    "@polkadot/api-augment": "../../polkadotjs-ws/api/packages/api-augment/build",
+    "@polkadot/api-base": "../../polkadotjs-ws/api/packages/api-base/build",
+    "@polkadot/types-create": "../../polkadotjs-ws/api/packages/types-create/build",
+    "@polkadot/types-known": "../../polkadotjs-ws/api/packages/types-known/build",
+    "@polkadot/types-support": "../../polkadotjs-ws/api/packages/types-support/build"
+  }
+}
