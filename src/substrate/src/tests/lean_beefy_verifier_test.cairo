@@ -1,5 +1,5 @@
 use array::{ArrayTrait, SpanTrait};
-use alexandria_substrate::lean_beefy_verifier::{
+use alexandria_substrate::lean_beefy_verifier::{signature_from_vrs,
     u8_eth_addresses_to_u256, verify_beefy_signatures, BeefyData, BeefyAuthoritySet,
     encoded_opaque_leaves_to_leaves, verify_merkle_proof, hashes_to_u256s,
     merkelize_for_merkle_root, get_hashes_from_items, verify_mmr_leaves_proof,
@@ -16,7 +16,7 @@ use core::clone::Clone;
 
 
 use starknet::secp256_trait::{
-    Signature, recover_public_key, verify_eth_signature, Secp256PointTrait, signature_from_vrs
+    Signature, recover_public_key, verify_eth_signature, Secp256PointTrait
 };
 use starknet::{eth_address::U256IntoEthAddress, EthAddress};
 use integer::u256;

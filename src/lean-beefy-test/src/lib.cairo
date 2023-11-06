@@ -125,6 +125,7 @@ impl StoreFelt252Array of Store<Array<felt252>> {
     }
 }
 
+// TODO maybe align with Option Serde
 // Do not use for arrays
 impl StoreOptionT<
     T, impl TCopy: Copy<T>, impl TDrop: Drop<T>, impl TStore: Store<T>, 
@@ -484,9 +485,12 @@ mod MangataStateFinality {
                         }
                         validator_set_list_hashed
                             .append(
-                                u256_byte_reverse(keccak_u256s_be_inputs(
-                                    array![self.validator_set_list.read((validator_set_id, itr))].span()
-                                ))
+                                keccak_be(
+                                    Slice{
+                                        span: u256_to_u8_a(self.validator_set_list.read((validator_set_id, itr))).span(),
+                                        range: Range{start: HASH_LENGTH - VALIDATOR_ADDRESS_LEN, end: HASH_LENGTH}
+                                    }
+                                )
                                 );
                         itr = itr + 1;
                     };

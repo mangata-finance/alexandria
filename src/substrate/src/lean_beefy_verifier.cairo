@@ -12,7 +12,7 @@ use alexandria_substrate::substrate_storage_read_proof_verifier::{
 };
 use core::traits::Default;
 use starknet::secp256_trait::{
-    Signature, recover_public_key, verify_eth_signature, Secp256PointTrait, signature_from_vrs
+    Signature, recover_public_key, Secp256PointTrait, Secp256Trait
 };
 use starknet::{eth_address::U256IntoEthAddress, EthAddress};
 use integer::u256;
@@ -21,6 +21,7 @@ use starknet::SyscallResultTrait;
 use debug::PrintTrait;
 use zeroable::Zeroable;
 use box::BoxTrait;
+use integer::U256TryIntoNonZero;
 
 
 // Possibly unsafe and insecure substrate storage proof verifier
@@ -1865,10 +1866,85 @@ fn verify_eth_signature_pre_hashed_u256_address(
     let eth_signature = signature_from_vrs(
         v, u256 { high: r_high, low: r_low }, u256 { high: s_high, low: s_low }
     );
-    verify_eth_signature::<Secp256k1Point>(
+    let eth_signature_flipped_parity = signature_from_vrs_flipped_parity(
+        v, u256 { high: r_high, low: r_low }, u256 { high: s_high, low: s_low }
+    );
+    assert(eth_signature_flipped_parity!=eth_signature, 'bothsigparitysame');
+    let res_bool = verify_eth_signature::<Secp256k1Point>(
         pre_hashed_message, eth_signature, Into::<u256, EthAddress>::into(address)
     );
+    res_bool.print();
+    if res_bool == false {
+        let res_bool_2 = verify_eth_signature::<Secp256k1Point>(
+            pre_hashed_message, eth_signature_flipped_parity, Into::<u256, EthAddress>::into(address)
+        );
+        res_bool_2.print();
+        if res_bool_2 ==false{
+            panic_with_felt252('sigverwithbothparityfailed');
+        }
+    }
     true
+}
+
+fn verify_eth_signature<
+    Secp256Point,
+    impl Secp256PointDrop: Drop<Secp256Point>,
+    impl Secp256Impl: Secp256Trait<Secp256Point>,
+    impl Secp256PointImpl: Secp256PointTrait<Secp256Point>
+>(
+    msg_hash: u256, signature: Signature, eth_address: EthAddress
+) -> bool {
+    assert(is_signature_entry_valid::<Secp256Point>(signature.r), 'Signature out of range');
+    assert(is_signature_entry_valid::<Secp256Point>(signature.s), 'Signature out of range');
+
+    let public_key_point = recover_public_key::<Secp256Point>(:msg_hash, :signature).unwrap();
+    let calculated_eth_address = public_key_point_to_eth_address(:public_key_point);
+    // eth_address.address.print();
+    // calculated_eth_address.address.print();
+    // assert(eth_address == calculated_eth_address, 'Invalid signature');
+    eth_address == calculated_eth_address
+}
+
+/// Checks whether `value` is in the range [1, N), where N is the size of the curve.
+fn is_signature_entry_valid<
+    Secp256Point,
+    impl Secp256PointDrop: Drop<Secp256Point>,
+    impl Secp256Impl: Secp256Trait<Secp256Point>
+>(
+    value: u256
+) -> bool {
+    value != 0_u256 && value < Secp256Impl::get_curve_size()
+}
+
+/// Converts a public key point to the corresponding Ethereum address.
+fn public_key_point_to_eth_address<
+    Secp256Point,
+    impl Secp256PointDrop: Drop<Secp256Point>,
+    impl Secp256Impl: Secp256Trait<Secp256Point>,
+    impl Secp256PointImpl: Secp256PointTrait<Secp256Point>
+>(
+    public_key_point: Secp256Point
+) -> EthAddress {
+    let (x, y) = public_key_point.get_coordinates().unwrap_syscall();
+
+    // Keccak output is little endian.
+    let point_hash_le = keccak_u256s_be_inputs(array![x, y].span());
+    let point_hash = u256 {
+        low: integer::u128_byte_reverse(point_hash_le.high),
+        high: integer::u128_byte_reverse(point_hash_le.low)
+    };
+
+    point_hash.into()
+}
+
+fn signature_from_vrs_flipped_parity(v: u32, r: u256, s: u256) -> Signature {
+    Signature { r, s, y_parity: v % 2 == 1,  }
+    // Signature { r, s, y_parity: v % 2 == 0,  }
+}
+
+fn signature_from_vrs(v: u32, r: u256, s: u256) -> Signature {
+    // Signature { r, s, y_parity: v % 2 == 1,  }
+    Signature { r, s, y_parity: v % 2 == 0,  }
 }
 
 fn array_eq_slice(a: Array<u8>, s: Slice<u8>) -> bool {

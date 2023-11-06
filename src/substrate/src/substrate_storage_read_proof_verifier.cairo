@@ -7,6 +7,7 @@ use array::{ArrayTrait, SpanTrait};
 use core::clone::Clone;
 use alexandria_substrate::blake2b::{blake2b};
 use core::traits::Default;
+use debug::PrintTrait;
 
 
 const FIRST_PREFIX: u8 = 0x00;
@@ -254,38 +255,38 @@ fn hashes_to_u256s(hashes: Span<u8>) -> Result<Array<u256>, felt252> {
 fn u256_to_u8_a(x: u256) -> Array<u8>{
     let mut arr: Array<u8> = array![];
 
-    arr.append(((x.high / 0x00ffffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x0000ffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x000000ffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x00000000ffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x0000000000ffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x000000000000ffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x00000000000000ffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x0000000000000000ffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x000000000000000000ffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x00000000000000000000ffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x0000000000000000000000ffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x000000000000000000000000ffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x00000000000000000000000000ffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x0000000000000000000000000000ffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.high / 0x000000000000000000000000000000ff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x01000000000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00010000000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000100000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000001000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000010000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000100000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000001000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000010000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000100000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000001000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000010000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000000100000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000000001000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000000000010000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.high / 0x00000000000000000000000000000100_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
     arr.append(((x.high                                          ) & BoundedInt::<u8>::max().into()).try_into().unwrap());
 
-    arr.append(((x.low / 0x00ffffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x0000ffffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x000000ffffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x00000000ffffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x0000000000ffffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x000000000000ffffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x00000000000000ffffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x0000000000000000ffffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x000000000000000000ffffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x00000000000000000000ffffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x0000000000000000000000ffffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x000000000000000000000000ffffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x00000000000000000000000000ffffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x0000000000000000000000000000ffff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
-    arr.append(((x.low / 0x000000000000000000000000000000ff_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x01000000000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00010000000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000100000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000001000000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000010000000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000100000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000001000000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000010000000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000100000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000001000000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000010000000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000000100000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000000001000000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000000000010000_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
+    arr.append(((x.low / 0x00000000000000000000000000000100_u128) & BoundedInt::<u8>::max().into()).try_into().unwrap());
     arr.append(((x.low                                          ) & BoundedInt::<u8>::max().into()).try_into().unwrap());
 
     arr
